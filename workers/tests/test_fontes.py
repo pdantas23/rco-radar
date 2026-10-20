@@ -19,6 +19,7 @@ def test_maps_converte_e_limita_5_avaliacoes_sem_nome():
     assert n.estado == "PI" and n.horario == {"segunda-feira": "08:00–18:00"}
     assert len(n.avaliacoes) == 5 and n.avaliacoes[0].texto == "t7" and n.avaliacoes[0].autor == ""
     assert maps_apify.converter({"title": "sem place_id", "address": "x"}) is None
+    assert n.bruto["title"] == "Barbearia do Zé" and all("name" not in r for r in n.bruto["reviews"])
 
 
 def test_uf():

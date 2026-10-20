@@ -239,6 +239,16 @@ async def test_regra_salva_vale_como_esta(conn):
     assert "cnpj_ativo" not in {c["nome"] for c in crit}
 
 
+async def test_email_do_site_tem_prioridade_sobre_o_da_receita(conn):
+    async def site_com_email(url):
+        return ResultadoSite(site_existe=True, site_responde=True, emails=["contato@ze.com.br"])
+    criar_pesquisa(conn, max_resultados=50)
+    f = fontes([negocio("p1", "Barbearia do Zé", site="ze.com.br")])
+    f.site = site_com_email
+    await rodar_tudo(conn, f)
+    assert conn.execute("select email, email_origem from radar.leads").fetchone() == ("contato@ze.com.br", "site")
+
+
 def test_nao_finaliza_antes_do_instagram(conn):
     lead_id = conn.execute("""insert into radar.leads (place_id, nome, endereco, link_maps, fonte_maps)
                               values ('py', 'Y', 'Rua', 'l', 'f') returning id""").fetchone()[0]

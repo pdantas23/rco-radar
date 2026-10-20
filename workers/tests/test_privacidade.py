@@ -11,8 +11,10 @@ def test_remove_cpf_de_socio_em_qualquer_nivel():
 
 
 def test_avaliacao_sem_quem_escreveu():
+    # "reviewerBadge" não está na lista proibida: só sai porque avaliação usa lista do que PODE ficar
     item = {"title": "Barbearia", "reviews": [{"name": "Maria Silva", "reviewerId": "9", "reviewerUrl": "u",
-                                               "text": "boa", "stars": 5, "publishedAtDate": "2026-10-01"}]}
+                                               "reviewerBadge": "Maria S.", "text": "boa", "stars": 5,
+                                               "publishedAtDate": "2026-10-01"}]}
     assert limpar(item)["reviews"] == [{"text": "boa", "stars": 5, "publishedAtDate": "2026-10-01"}]
     assert limpar(item)["title"] == "Barbearia"
 
