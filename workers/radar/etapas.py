@@ -1,8 +1,10 @@
 """Etapas do pipeline (um handler por tipo de job em radar.jobs).
 
 Fluxo de um lead novo:
-  minerar ─┬─> enriquecer_site ─> enriquecer_instagram ─> verificar_anuncios ─┐
-           └─> enriquecer_cnpj ──────────────────────────────────────────────┴─> finalizar
+  minerar ─┬─> enriquecer_site ─> enriquecer_instagram ─(─> verificar_anuncios)─┐
+           └─> enriquecer_cnpj ─────────────────────────────────────────────────┴─> finalizar
+  Anúncios ativos ficaram para o futuro (decisão do Luis, 20/10/2026): a etapa só
+  entra no fluxo com radar.config 'anuncios_ativos' = {"ligado": true}.
   finalizar (faturamento + presença, status 'enriquecido') ─> pontuar ('pontuado')
 
 Falha em uma etapa não trava o lead: o campo fica 'nao_verificado' e o fluxo segue.
@@ -28,6 +30,11 @@ log = logging.getLogger("radar.etapas")
 
 ENRIQUECIMENTO = ("enriquecer_site", "enriquecer_cnpj", "enriquecer_instagram", "verificar_anuncios")
 RAIO_PADRAO_CIDADE_KM = 15
+
+
+def anuncios_ligados(conn) -> bool:
+    row = conn.execute("select valor from radar.config where chave = 'anuncios_ativos'").fetchone()
+    return bool(row and row[0].get("ligado"))
 LIMITE_CONFIANCA_IG = 60
 
 
@@ -196,7 +203,7 @@ async def enriquecer_instagram(conn, job: fila.Job, f: Fontes) -> None:
              perfil.bio_tem_whatsapp, perfil.conta_comercial, f.instagram.chave, *site))
     conn.execute("update radar.leads set instagram_status = %s where id = %s",
                  ("encontrado" if perfil else "nao_encontrado", lead["id"]))
-    if not job.payload.get("sem_anuncios"):
+    if not job.payload.get("sem_anuncios") and anuncios_ligados(conn):
         fila.enfileirar(conn, "verificar_anuncios", pesquisa_id=job.pesquisa_id, lead_id=lead["id"],
                         payload={"pagina": job.payload.get("facebook") or (perfil.usuario if perfil else None)})
 
@@ -264,12 +271,16 @@ def talvez_finalizar(conn, lead_id: str) -> bool:
             return False
         abertos = conn.execute(
             """select count(*) filter (where status in ('pendente','rodando')),
-                      count(*) filter (where tipo = 'verificar_anuncios'),
                       count(*) filter (where tipo = 'enriquecer_cnpj'),
-                      count(*) filter (where tipo = 'enriquecer_site')
+                      count(*) filter (where tipo = 'enriquecer_site'),
+                      count(*) filter (where tipo = 'enriquecer_instagram'),
+                      count(*) filter (where tipo = 'verificar_anuncios')
                from radar.jobs where lead_id = %s and tipo = any(%s)""", (lead_id, list(ENRIQUECIMENTO))).fetchone()
-        pendentes, anuncios, cnpj, site = abertos
-        if pendentes or not cnpj or not (anuncios or (site and _cadeia_morreu(conn, lead_id))):
+        pendentes, cnpj, site, instagram, anuncios = abertos
+        if pendentes or not cnpj or not site:
+            return False
+        fim_da_cadeia = anuncios if anuncios_ligados(conn) else instagram
+        if not (fim_da_cadeia or _cadeia_morreu(conn, lead_id)):
             return False
         _calcular_estimativas(conn, lead_id)
         conn.execute("update radar.leads set status = 'enriquecido' where id = %s", (lead_id,))
@@ -326,7 +337,7 @@ def regra_vigente(conn, nicho: str | None) -> tuple[Regra, int]:
     regras = []
     for r in rows:
         faixas = r["faixas"] or {}
-        regras.append((Regra(r["versao"], {**PESOS_PADRAO, **(r["pesos"] or {})},
+        regras.append((Regra(r["versao"], r["pesos"] or dict(PESOS_PADRAO),
                              {k: faixas.get(k, v) for k, v in FAIXAS_PADRAO.items()},
                              {k: faixas.get(k, v) for k, v in PARAMS_PADRAO.items()}, r["nicho"]), r["id"]))
     from radar.pontuacao import escolher_regra

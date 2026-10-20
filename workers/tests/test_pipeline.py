@@ -122,19 +122,28 @@ def fontes(negocios, ig=None):
     return etapas.Fontes(FakeMaps(negocios), FakeCnpj(), ig or FakeInstagram(), FakeAnuncios(), geo, site_sem_site)
 
 
-async def test_exemplo_do_levantamento_vira_95_quente(conn):
+async def test_exemplo_do_levantamento_vira_quente(conn):
     pid = criar_pesquisa(conn, max_resultados=200, nota_minima=4.0)
     await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé")]))
     lead = conn.execute("""select status, pontuacao, classificacao, anuncio_ativo, presenca_digital,
                                   faturamento_estimado_faixa, cnpj_status, tem_whatsapp_provavel, telefone
                            from radar.leads""").fetchone()
     # porte ME + 180 avaliações + ritmo => 30–80 mil, como no exemplo do levantamento
-    assert lead == ("pontuado", 95, "quente", "nao", "media", "30k_80k", "encontrado", True, "+5586999998888")
+    # anúncios fora da v1: fica 'nao_verificado' e nenhuma verificação é feita
+    assert lead == ("pontuado", 100, "quente", "nao_verificado", "media", "30k_80k", "encontrado", True, "+5586999998888")
+    assert conn.execute("select count(*) from radar.jobs where tipo = 'verificar_anuncios'").fetchone()[0] == 0
     assert conn.execute("select count(*) from radar.avaliacoes").fetchone()[0] == 5
     assert conn.execute("select status from radar.pesquisas where id = %s", (pid,)).fetchone()[0] == "concluida"
     assert conn.execute("select custo_real > 0 from radar.pesquisas").fetchone()[0]
     crit = conn.execute("select criterios from radar.pontuacoes").fetchone()[0]
-    assert {c["nome"]: c["pontos"] for c in crit}["sem_anuncio_ativo"] == 25
+    assert {c["nome"]: c["pontos"] for c in crit}["tem_whatsapp"] == 25
+
+
+async def test_anuncios_ligados_entram_no_fluxo(conn):
+    conn.execute("""insert into radar.config (chave, valor) values ('anuncios_ativos', '{"ligado": true}')""")
+    criar_pesquisa(conn, max_resultados=50)
+    await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé")]))
+    assert conn.execute("select status, anuncio_ativo from radar.leads").fetchone() == ("pontuado", "nao")
 
 
 async def test_dedup_fechado_e_filtros(conn):
@@ -159,16 +168,18 @@ async def test_instagram_bloqueado_nao_trava_o_lead(conn):
     criar_pesquisa(conn, max_resultados=50)
     await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé")], ig=FakeInstagram(falhar=True)))
     lead = conn.execute("select status, instagram_status, anuncio_ativo from radar.leads").fetchone()
-    assert lead == ("pontuado", "nao_verificado", "nao_verificado")
+    assert lead == ("pontuado", "nao_verificado", "nao_verificado")   # falhou e mesmo assim fechou
     assert conn.execute("select count(*) from radar.jobs where status = 'falhou'").fetchone()[0] == 1
 
 
 async def test_regra_por_nicho_e_versao(conn):
     conn.execute("""insert into radar.regras_pontuacao (versao, nicho, pesos, faixas)
-                    values (2, 'Barbearia', '{"sem_anuncio_ativo": 30}', '{"quente": 70, "morno": 40}')""")
+                    values (2, 'Barbearia', '{"tem_whatsapp": 10, "presenca_media_ou_forte": 20,
+                            "faturamento_30k_ou_mais": 20, "google_bem_avaliado": 20, "cnpj_ativo": 15}',
+                            '{"quente": 70, "morno": 40}')""")
     criar_pesquisa(conn, max_resultados=50)
     await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé")]))
-    assert conn.execute("select pontuacao, versao_regra from radar.leads").fetchone() == (100, 2)
+    assert conn.execute("select pontuacao, versao_regra from radar.leads").fetchone() == (85, 2)
 
 
 async def test_recoleta_do_instagram_que_falha_nao_deixa_dado_velho(conn):
@@ -188,11 +199,11 @@ async def test_recoleta_do_instagram_que_falha_nao_deixa_dado_velho(conn):
 
 
 def test_nao_finaliza_com_cnpj_pendente(conn):
-    """Com vários robôs, anúncios podem terminar antes do CNPJ: o lead espera."""
+    """Com vários robôs, o Instagram pode terminar antes do CNPJ: o lead espera."""
     lead_id = conn.execute("""insert into radar.leads (place_id, nome, endereco, link_maps, fonte_maps)
                               values ('px', 'X', 'Rua', 'l', 'f') returning id""").fetchone()[0]
     for tipo, st in (("enriquecer_site", "feito"), ("enriquecer_instagram", "feito"),
-                     ("verificar_anuncios", "feito"), ("enriquecer_cnpj", "pendente")):
+                     ("enriquecer_cnpj", "pendente")):
         conn.execute("insert into radar.jobs (tipo, lead_id, status) values (%s, %s, %s)", (tipo, lead_id, st))
     conn.execute("update radar.jobs set status = 'rodando' where tipo = 'enriquecer_cnpj'")
     conn.execute("update radar.jobs set status = 'feito' where tipo = 'enriquecer_cnpj'")
@@ -200,3 +211,25 @@ def test_nao_finaliza_com_cnpj_pendente(conn):
     conn.execute("update radar.leads set status = 'encontrado' where id = %s", (lead_id,))
     conn.execute("delete from radar.jobs where tipo = 'enriquecer_cnpj'")
     assert etapas.talvez_finalizar(conn, lead_id) is False    # CNPJ nunca rodou: não fecha
+
+
+async def test_regra_salva_vale_como_esta(conn):
+    """Admin tirou o CNPJ ativo da regra: o critério não volta pelos pesos padrão."""
+    conn.execute("""insert into radar.regras_pontuacao (versao, nicho, pesos, faixas)
+                    values (5, null, '{"tem_whatsapp": 25, "presenca_media_ou_forte": 20,
+                            "faturamento_30k_ou_mais": 20, "google_bem_avaliado": 20}', '{"quente": 70, "morno": 40}')""")
+    criar_pesquisa(conn, max_resultados=50)
+    await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé")]))
+    assert conn.execute("select pontuacao from radar.leads").fetchone()[0] == 85
+    crit = conn.execute("select criterios from radar.pontuacoes").fetchone()[0]
+    assert "cnpj_ativo" not in {c["nome"] for c in crit}
+
+
+def test_nao_finaliza_antes_do_instagram(conn):
+    lead_id = conn.execute("""insert into radar.leads (place_id, nome, endereco, link_maps, fonte_maps)
+                              values ('py', 'Y', 'Rua', 'l', 'f') returning id""").fetchone()[0]
+    for tipo in ("enriquecer_site", "enriquecer_cnpj"):
+        conn.execute("insert into radar.jobs (tipo, lead_id, status) values (%s, %s, 'feito')", (tipo, lead_id))
+    assert etapas.talvez_finalizar(conn, lead_id) is False
+    conn.execute("insert into radar.jobs (tipo, lead_id, status) values ('enriquecer_instagram', %s, 'feito')", (lead_id,))
+    assert etapas.talvez_finalizar(conn, lead_id) is True

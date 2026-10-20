@@ -1,6 +1,6 @@
 import pytest
 
-from radar.pontuacao import LeadParaPontuar, Regra, escolher_regra, pontuar
+from radar.pontuacao import PESOS_PADRAO, LeadParaPontuar, Regra, escolher_regra, pontuar
 
 
 def ze(**kw):
@@ -11,15 +11,25 @@ def ze(**kw):
     return LeadParaPontuar(**base)
 
 
-def test_exemplo_do_levantamento_95_quente():
+def test_exemplo_do_levantamento_com_pesos_da_v1():
     p = pontuar(ze(), Regra(versao=1))
-    assert p.total == 95 and p.classificacao == "quente"
+    assert p.total == 100 and p.classificacao == "quente"
     assert all(c.bateu for c in p.criterios if not c.nome.startswith("zera_"))
+    # anúncios ficaram para o futuro: o critério nem aparece na conta aberta
+    assert "sem_anuncio_ativo" not in {c.nome for c in p.criterios}
 
 
-def test_anuncio_nao_verificado_nao_ganha_ponto():
-    p = pontuar(ze(anuncio_ativo="nao_verificado"), Regra(versao=1))
-    assert p.total == 70
+def test_criterio_de_anuncio_volta_quando_admin_inclui_o_peso():
+    regra = Regra(versao=2, pesos={**PESOS_PADRAO, "sem_anuncio_ativo": 25})
+    assert pontuar(ze(), regra).total == 100                         # teto 100
+    p = pontuar(ze(anuncio_ativo="nao_verificado"), regra)
+    assert {c.nome: c.pontos for c in p.criterios}["sem_anuncio_ativo"] == 0
+
+
+def test_peso_removido_pelo_admin_nao_conta():
+    regra = Regra(versao=3, pesos={k: v for k, v in PESOS_PADRAO.items() if k != "cnpj_ativo"})
+    p = pontuar(ze(), regra)
+    assert p.total == 85 and "cnpj_ativo" not in {c.nome for c in p.criterios}
 
 
 @pytest.mark.parametrize("kw", [
@@ -33,7 +43,7 @@ def test_zera(kw):
 
 
 def test_faixas_editaveis():
-    p = pontuar(ze(), Regra(versao=2, faixas={"quente": 99, "morno": 40}))
+    p = pontuar(ze(cnpj_situacao=None), Regra(versao=2, faixas={"quente": 90, "morno": 40}))   # 85 pts
     assert p.classificacao == "morno" and p.versao_regra == 2
 
 

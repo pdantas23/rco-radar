@@ -7,14 +7,16 @@ Nunca descarta: nota baixa só ordena por último.
 
 from dataclasses import dataclass, field
 
-# Pesos iniciais do levantamento (exemplo da Barbearia do Zé soma 95).
+# Pesos padrão da v1 (decisão do Philip, 20/10/2026): anúncios ativos ficaram para o
+# futuro, então "sem_anuncio_ativo" saiu e os 25 pontos foram redistribuídos.
+# Um critério só conta se estiver nos pesos da regra: incluir "sem_anuncio_ativo"
+# na tela de pesos reativa o critério sem mudar código.
 PESOS_PADRAO = {
-    "sem_anuncio_ativo": 25,
-    "presenca_media_ou_forte": 15,
-    "tem_whatsapp": 15,
-    "faturamento_30k_ou_mais": 15,
-    "google_bem_avaliado": 15,
-    "cnpj_ativo": 10,
+    "tem_whatsapp": 25,
+    "presenca_media_ou_forte": 20,
+    "faturamento_30k_ou_mais": 20,
+    "google_bem_avaliado": 20,
+    "cnpj_ativo": 15,
 }
 FAIXAS_PADRAO = {"quente": 70, "morno": 40}
 PARAMS_PADRAO = {"nota_minima": 4.0, "min_avaliacoes": 50}
@@ -106,8 +108,8 @@ def pontuar(lead: LeadParaPontuar, regra: Regra) -> Pontuacao:
         "cnpj_ativo": (lead.cnpj_situacao or "").upper() == "ATIVA",
     }
     criterios = [
-        Criterio(nome, ROTULOS.get(nome, nome), bateu, regra.pesos.get(nome, 0) if bateu else 0)
-        for nome, bateu in checagens.items()
+        Criterio(nome, ROTULOS.get(nome, nome), bateu, regra.pesos[nome] if bateu else 0)
+        for nome, bateu in checagens.items() if nome in regra.pesos
     ]
     total = sum(c.pontos for c in criterios)
 
