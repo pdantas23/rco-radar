@@ -83,6 +83,10 @@ async def despachar(conn, comercial: Comercial, agora: datetime) -> int:
         cfg = _agencia(conn, d["agency_id"])
         if not cfg or not cfg.get("ativo"):
             continue
+        if not (d["abordagem_texto"] or "").strip():
+            # mensagem inicial ainda não definida: o lote espera, nada falha nem sai
+            log.info("disparo %s aguardando a mensagem inicial da agência", d["id"])
+            continue
         local = _agora_local(cfg, agora)
         inicio, fim = cfg.get("janela_inicio") or JANELA_PADRAO[0], cfg.get("janela_fim") or JANELA_PADRAO[1]
         if not (inicio <= local.time() < fim):

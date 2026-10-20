@@ -276,3 +276,12 @@ async def test_sem_conexao_de_whatsapp_nada_sai(conn):
     conn.execute("update radar.agencias set whatsapp_config_id = null where agency_id = %s", (AGENCIA,))
     com = FakeComercial(conn)
     assert await conversa.despachar(conn, com, AGORA) == 0 and com.envios == []
+
+
+
+async def test_sem_mensagem_inicial_o_lote_espera(conn):
+    preparar(conn)
+    conn.execute("update radar.abordagens set texto = ''")
+    com = FakeComercial(conn)
+    assert await conversa.despachar(conn, com, AGORA) == 0 and com.envios == []
+    assert {r[0] for r in conn.execute("select status from radar.disparos_leads")} == {"pendente"}
