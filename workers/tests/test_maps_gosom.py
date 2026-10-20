@@ -52,7 +52,9 @@ def test_csv_real_do_teste_na_vps():
     arq = pathlib.Path(__file__).parents[2] / "docs" / "gosom-teste" / "d2.csv"
     ns = [converter(l, "PI") for l in csv.DictReader(arq.open(encoding="utf-8"))]
     assert len(ns) == 20 and all(ns)
-    assert all(n.estado == "PI" and n.cidade == "Teresina" and n.place_id for n in ns)
+    # o raio atravessa o rio: Timon-MA aparece numa busca centrada em Teresina-PI
+    assert {(n.cidade, n.estado) for n in ns} == {("Teresina", "PI"), ("Timon", "MA")}
+    assert all(n.place_id for n in ns)
     for n in ns:
         assert len(n.avaliacoes) <= 5
         datas = [a.data for a in n.avaliacoes]
