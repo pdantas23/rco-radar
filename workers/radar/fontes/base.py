@@ -68,6 +68,7 @@ class NegocioMaps:
     fechado_permanentemente: bool
     whatsapp_link: str | None = None
     avaliacoes: list[Avaliacao] = field(default_factory=list)   # no máximo 5
+    bruto: dict | None = None        # resposta completa, já sem dado de pessoa física
 
 
 class FonteMaps(Adaptador):
@@ -102,6 +103,7 @@ class DadosCnpj:
     cnpj_matriz: str
     qtd_filiais: int | None = None
     faturamento_faixa: str | None = None   # quando o fornecedor entrega (base externa)
+    bruto: dict = field(default_factory=dict)   # {"casa": ..., "brasilapi": ...}, sem CPF
 
 
 class FonteCnpj(Adaptador):
@@ -122,6 +124,7 @@ class PerfilInstagram:
     bio_tem_link: bool
     bio_tem_whatsapp: bool
     conta_comercial: bool | None
+    bruto: dict | None = None
 
 
 class FonteInstagram(Adaptador):

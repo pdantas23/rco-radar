@@ -128,13 +128,13 @@ def _gravar_lead(conn, n, fonte: str) -> tuple[str, bool]:
     row = conn.execute(
         """insert into radar.leads (place_id, nome, categoria, nicho, endereco, cidade, estado, cep, lat, lng,
                  telefone, tem_whatsapp_provavel, whatsapp, site, nota, qtd_avaliacoes, horario, link_maps,
-                 fonte_maps, site_status)
-           values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                 fonte_maps, site_status, dados_maps)
+           values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
            on conflict (place_id) do nothing returning id""",
         (n.place_id, n.nome, n.categoria, n.categoria, n.endereco, n.cidade, n.estado or None, n.cep,
          n.lat, n.lng, tel.e164 if tel else None, bool(wa) or bool(tel and tel.celular), wa, n.site,
          n.nota, n.qtd_avaliacoes, json.dumps(n.horario) if n.horario else None, n.link_maps, fonte,
-         "nao_verificado" if n.site else "nao_se_aplica"),
+         "nao_verificado" if n.site else "nao_se_aplica", json.dumps(n.bruto) if n.bruto else None),
     ).fetchone()
     if row is None:
         return conn.execute("select id from radar.leads where place_id = %s", (n.place_id,)).fetchone()[0], False
@@ -152,15 +152,19 @@ async def enriquecer_site(conn, job: fila.Job, f: Fontes) -> None:
     conn.execute(
         """insert into radar.presenca (lead_id, site_existe, site_responde, site_https, site_tem_whatsapp,
                  site_tem_meta_pixel, site_tem_google_tag, site_tem_google_ads, site_plataforma,
-                 instagram_user, instagram_origem, facebook_pagina, fonte_site)
-           values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'site_proprio')""",
+                 instagram_user, instagram_origem, facebook_pagina, redes, site_emails, fonte_site)
+           values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'site_proprio')""",
         (lead["id"], r.site_existe, r.site_responde, r.site_https, r.site_tem_whatsapp, r.site_tem_meta_pixel,
          r.site_tem_google_tag, r.site_tem_google_ads, r.site_plataforma if r.site_responde else None,
-         r.instagram_user, "site" if r.instagram_user else None, r.facebook_pagina))
+         r.instagram_user, "site" if r.instagram_user else None, r.facebook_pagina,
+         json.dumps(r.redes) if r.redes else None, r.emails or None))
     status = "nao_se_aplica" if not r.site_existe else ("encontrado" if r.site_responde else "nao_encontrado")
+    email = r.emails[0] if r.emails else None
     conn.execute("""update radar.leads set site_status = %s,
-                    whatsapp = coalesce(whatsapp, %s), tem_whatsapp_provavel = tem_whatsapp_provavel or %s
-                    where id = %s""", (status, r.whatsapp, bool(r.whatsapp), lead["id"]))
+                    whatsapp = coalesce(whatsapp, %s), tem_whatsapp_provavel = tem_whatsapp_provavel or %s,
+                    email_origem = case when email is null and %s::text is not null then 'site' else email_origem end,
+                    email = coalesce(email, %s)
+                    where id = %s""", (status, r.whatsapp, bool(r.whatsapp), email, email, lead["id"]))
     fila.enfileirar(conn, "enriquecer_instagram", pesquisa_id=job.pesquisa_id, lead_id=lead["id"],
                     payload={"instagram": r.instagram_user, "facebook": r.facebook_pagina})
 
@@ -187,20 +191,23 @@ async def enriquecer_instagram(conn, job: fila.Job, f: Fontes) -> None:
         custo(conn, f.instagram.chave, "perfil", f.instagram.custo_ultima_chamada,
               pesquisa_id=job.pesquisa_id, lead_id=lead["id"])
     site = conn.execute("""select site_existe, site_responde, site_https, site_tem_whatsapp, site_tem_meta_pixel,
-                                  site_tem_google_tag, site_tem_google_ads, site_plataforma, facebook_pagina
+                                  site_tem_google_tag, site_tem_google_ads, site_plataforma, facebook_pagina,
+                                  redes, site_emails
                            from radar.presenca where lead_id = %s order by coletado_em desc, id desc limit 1""",
-                        (lead["id"],)).fetchone() or (None,) * 9
+                        (lead["id"],)).fetchone() or (None,) * 11
+    site = tuple(json.dumps(v) if isinstance(v, dict) else v for v in site)
     if perfil:
         conn.execute(
             """insert into radar.presenca (lead_id, instagram_user, instagram_origem, instagram_confianca,
                      seguidores, seguindo, posts_total, ultimo_post_em, posts_30d, bio, bio_tem_link,
-                     bio_tem_whatsapp, conta_comercial, fonte_instagram,
+                     bio_tem_whatsapp, conta_comercial, fonte_instagram, dados_instagram,
                      site_existe, site_responde, site_https, site_tem_whatsapp, site_tem_meta_pixel,
-                     site_tem_google_tag, site_tem_google_ads, site_plataforma, facebook_pagina)
-               values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                     site_tem_google_tag, site_tem_google_ads, site_plataforma, facebook_pagina, redes, site_emails)
+               values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (lead["id"], perfil.usuario, origem, confianca, perfil.seguidores, perfil.seguindo,
              perfil.posts_total, perfil.ultimo_post_em, perfil.posts_30d, perfil.bio, perfil.bio_tem_link,
-             perfil.bio_tem_whatsapp, perfil.conta_comercial, f.instagram.chave, *site))
+             perfil.bio_tem_whatsapp, perfil.conta_comercial, f.instagram.chave,
+             json.dumps(perfil.bruto) if perfil.bruto else None, *site))
     conn.execute("update radar.leads set instagram_status = %s where id = %s",
                  ("encontrado" if perfil else "nao_encontrado", lead["id"]))
     if not job.payload.get("sem_anuncios") and anuncios_ligados(conn):
@@ -251,12 +258,16 @@ async def enriquecer_cnpj(conn, job: fila.Job, f: Fontes) -> None:
             """insert into radar.empresas (lead_id, escolhido, cnpj, razao_social, nome_fantasia, situacao,
                      abertura, porte, natureza, capital_social, cnae_principal, cnae_descricao,
                      cnaes_secundarios, regime, qtd_socios, socios, email_rf, telefone_rf, qtd_filiais,
-                     eh_filial, cnpj_matriz, confianca_cnpj, motivo_confianca, fonte)
-               values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                     eh_filial, cnpj_matriz, confianca_cnpj, motivo_confianca, fonte, dados_receita)
+               values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (lead["id"], d.cnpj == escolhido, d.cnpj, d.razao_social, d.nome_fantasia, d.situacao, d.abertura,
              d.porte, d.natureza, d.capital_social, d.cnae_principal, d.cnae_descricao,
              json.dumps(d.cnaes_secundarios), d.regime, len(d.socios), json.dumps(d.socios), d.email_rf,
-             d.telefone_rf, d.qtd_filiais, d.eh_filial, d.cnpj_matriz, r.confianca, r.motivo, f.cnpj.chave))
+             d.telefone_rf, d.qtd_filiais, d.eh_filial, d.cnpj_matriz, r.confianca, r.motivo, f.cnpj.chave,
+             json.dumps(d.bruto) if d.bruto else None))
+    if escolhido and por_cnpj[escolhido].email_rf:
+        conn.execute("""update radar.leads set email = %s, email_origem = 'receita'
+                        where id = %s and email is null""", (por_cnpj[escolhido].email_rf.lower(), lead["id"]))
     status = "encontrado" if escolhido else ("revisao" if dec.revisao_humana else "nao_encontrado")
     conn.execute("update radar.leads set cnpj_status = %s, revisao_cnpj = %s where id = %s",
                  (status, dec.revisao_humana, lead["id"]))

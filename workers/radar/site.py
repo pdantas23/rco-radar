@@ -42,6 +42,14 @@ PLATAFORMAS: dict[str, list[str]] = {
 INSTAGRAM_RE = re.compile(r"instagram\.com/([A-Za-z0-9_.]{2,30})/?(?:[\"'?#]|$)", re.I)
 FACEBOOK_RE = re.compile(r"facebook\.com/([A-Za-z0-9_.\-]{3,80})/?(?:[\"'?#]|$)", re.I)
 IG_NAO_PERFIL = {"p", "reel", "reels", "explore", "stories", "accounts", "tv", "sharer"}
+REDES_RE = {
+    "tiktok": re.compile(r"tiktok\.com/@([A-Za-z0-9_.]{2,40})", re.I),
+    "youtube": re.compile(r"youtube\.com/(?:@|c/|channel/|user/)([A-Za-z0-9_.\-]{2,80})", re.I),
+    "linkedin": re.compile(r"linkedin\.com/(?:company|in)/([A-Za-z0-9_.\-%]{2,100})", re.I),
+}
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+EMAIL_LIXO = re.compile(r"\.(png|jpe?g|gif|webp|svg)$|@(example|exemplo|sentry|wixpress|domain|email)\.|^(seu|your)?e?mail@", re.I)
+PAGINAS_CONTATO = ("/contato", "/contato/", "/fale-conosco", "/contact", "/contatos")
 FB_NAO_PAGINA = {"sharer", "sharer.php", "tr", "plugins", "dialog", "share", "profile.php"}
 
 _comp = {k: [re.compile(p, re.I) for p in v] for k, v in {**ASSINATURAS, **PLATAFORMAS}.items()}
@@ -62,6 +70,8 @@ class ResultadoSite:
     whatsapp: str | None = None
     instagram_user: str | None = None
     facebook_pagina: str | None = None
+    emails: list[str] = field(default_factory=list)
+    redes: dict = field(default_factory=dict)
     coletado_em: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -91,7 +101,38 @@ def analisar_html(html: str, url_final: str) -> ResultadoSite:
         whatsapp=whatsapp_de_link(amostra),
         instagram_user=ig,
         facebook_pagina=fb,
+        emails=extrair_emails(amostra),
+        redes=extrair_redes(amostra, ig, fb),
     )
+
+
+def extrair_emails(html: str) -> list[str]:
+    vistos = []
+    for e in EMAIL_RE.findall(html):
+        e = e.lower().strip(".")
+        if not EMAIL_LIXO.search(e) and e not in vistos:
+            vistos.append(e)
+    return vistos[:5]
+
+
+def extrair_redes(html: str, ig: str | None, fb: str | None) -> dict:
+    redes = {k: m.group(1) for k, rx in REDES_RE.items() if (m := rx.search(html))}
+    if ig:
+        redes["instagram"] = ig
+    if fb:
+        redes["facebook"] = fb
+    return redes
+
+
+def juntar(principal: ResultadoSite, contato: ResultadoSite) -> ResultadoSite:
+    """Completa o resultado da home com o que só aparece na página de contato."""
+    principal.emails = list(dict.fromkeys(principal.emails + contato.emails))[:5]
+    principal.redes = {**contato.redes, **principal.redes}
+    principal.whatsapp = principal.whatsapp or contato.whatsapp
+    principal.site_tem_whatsapp = principal.site_tem_whatsapp or contato.site_tem_whatsapp
+    principal.instagram_user = principal.instagram_user or contato.instagram_user
+    principal.facebook_pagina = principal.facebook_pagina or contato.facebook_pagina
+    return principal
 
 
 def _dominio(url: str) -> str:
@@ -123,7 +164,16 @@ async def verificar(url: str | None, client: httpx.AsyncClient | None = None) ->
             except (httpx.HTTPError, ValueError):
                 continue
             if resp.status_code == 200 and "html" in resp.headers.get("content-type", ""):
-                return analisar_html(resp.text, str(resp.url))
+                resultado = analisar_html(resp.text, str(resp.url))
+                raiz = str(resp.url).rstrip("/")
+                for caminho in PAGINAS_CONTATO:
+                    try:
+                        c = await client.get(raiz + caminho)
+                    except (httpx.HTTPError, ValueError):
+                        continue
+                    if c.status_code == 200 and "html" in c.headers.get("content-type", "") and len(c.text) > 500:
+                        return juntar(resultado, analisar_html(c.text, str(c.url)))
+                return resultado
         # tem site cadastrado mas nenhuma variante respondeu
         return ResultadoSite(site_existe=True, site_responde=False)
     finally:

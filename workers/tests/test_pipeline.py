@@ -24,6 +24,7 @@ def negocio(pid, nome, **kw):
                 cidade="Teresina", estado="PI", cep="64000-000", lat=-5.09, lng=-42.80,
                 telefone="(86) 99999-8888", site=None, nota=4.6, qtd_avaliacoes=180, horario=None,
                 link_maps=f"https://maps.google.com/?cid={pid}", fechado_permanentemente=False,
+                bruto={"title": nome, "reviews": [{"text": "ótimo", "stars": 5}]},
                 avaliacoes=[Avaliacao("", 5, f"ótimo {i}", datetime(2026, 10, i + 1, tzinfo=timezone.utc)) for i in range(7)])
     base.update(kw)
     return NegocioMaps(**base)
@@ -52,7 +53,11 @@ class FakeCnpj:
                           capital_social=10000, cnae_principal="9602501", cnae_descricao="Cabeleireiros",
                           cnaes_secundarios=[], regime="Simples", socios=[{"nome": "JOSE", "qualificacao": "Titular"}],
                           email_rf=None, telefone_rf=None, logradouro="RUA A", numero="100", municipio="TERESINA",
-                          uf="PI", cep="64000000", eh_filial=False, cnpj_matriz="111111110001")]
+                          uf="PI", cep="64000000", eh_filial=False, cnpj_matriz="111111110001",
+                          bruto={"casa": {"razao_social": "JOSE S SILVA ME"}})]
+
+    async def detalhar(self, cnpj):
+        return {"email": "ZE@receita.com", "opcao_pelo_simples": True, "cnae_fiscal": 9602501}
 
 
 class FakeInstagram:
@@ -69,7 +74,8 @@ class FakeInstagram:
     async def perfil(self, usuario):
         self.custo_ultima_chamada = 0.01
         return PerfilInstagram(usuario, 2300, 300, 400, datetime(2026, 10, 15, tzinfo=timezone.utc), 9,
-                               "Agende pelo WhatsApp", True, True, True)
+                               "Agende pelo WhatsApp", True, True, True,
+                               bruto={"username": usuario, "fullName": "Barbearia do Zé"})
 
 
 class FakeAnuncios:
@@ -137,6 +143,14 @@ async def test_exemplo_do_levantamento_vira_quente(conn):
     assert conn.execute("select custo_real > 0 from radar.pesquisas").fetchone()[0]
     crit = conn.execute("select criterios from radar.pontuacoes").fetchone()[0]
     assert {c["nome"]: c["pontos"] for c in crit}["tem_whatsapp"] == 25
+    # todos os dados possíveis: respostas completas guardadas, sem pessoa física
+    maps, ig = conn.execute("""select l.dados_maps, p.dados_instagram from radar.leads l
+                               join radar.presenca p on p.lead_id = l.id and p.dados_instagram is not null""").fetchone()
+    assert maps["title"] == "Barbearia do Zé" and "name" not in maps["reviews"][0]
+    assert ig == {"username": "barbeariadoze", "fullName": "Barbearia do Zé"}
+    receita = conn.execute("select dados_receita from radar.empresas where escolhido").fetchone()[0]
+    assert "documento" not in str(receita) and receita["casa"]["razao_social"] == "JOSE S SILVA ME"
+    assert conn.execute("select email, email_origem from radar.leads").fetchone() == ("ze@receita.com", "receita")
 
 
 async def test_anuncios_ligados_entram_no_fluxo(conn):

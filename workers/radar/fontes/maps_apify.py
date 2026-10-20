@@ -12,6 +12,7 @@ import httpx
 
 from radar.fontes.apify import rodar_ator
 from radar.fontes.base import Avaliacao, ConsultaMaps, FonteMaps, NegocioMaps
+from radar.privacidade import limpar
 
 ATOR = "compass/crawler-google-places"
 DOLAR = float(os.environ.get("RADAR_DOLAR_BRL", "5.04"))
@@ -75,6 +76,7 @@ def converter(item: dict, uf_padrao: str = "") -> NegocioMaps | None:
         # sem nome do autor (LGPD): só nota, texto e data
         avaliacoes=[Avaliacao(autor="", nota=int(r.get("stars") or 0), texto=(r.get("text") or "").strip(),
                               data=_data(r.get("publishedAtDate"))) for r in reviews if r.get("text")],
+        bruto=limpar(item),
     )
 
 

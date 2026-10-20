@@ -13,6 +13,7 @@ import httpx
 
 from radar.cnpj_match import RUIDO_NOME
 from radar.fontes.base import DadosCnpj, FonteCnpj
+from radar.privacidade import limpar
 
 CASA_URL = "https://api.casadosdados.com.br/v5/cnpj/pesquisa"
 BRASILAPI_URL = "https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
@@ -65,6 +66,7 @@ def converter_casa(item: dict) -> DadosCnpj:
         municipio=end.get("municipio") or "", uf=(end.get("uf") or "").upper(), cep=end.get("cep") or "",
         eh_filial=(item.get("matriz_filial") or "").upper() == "FILIAL",
         cnpj_matriz=(item.get("cnpj_raiz") or "") + "0001",
+        bruto={"casa": limpar(item)},
     )
 
 
@@ -86,6 +88,7 @@ def completar_brasilapi(d: DadosCnpj, item: dict) -> DadosCnpj:
         d.socios = [{"nome": s.get("nome_socio"), "qualificacao": s.get("qualificacao_socio")}
                     for s in item["qsa"]]
     d.porte = d.porte or PORTE.get((item.get("porte") or "").upper())
+    d.bruto["brasilapi"] = limpar(item)
     return d
 
 

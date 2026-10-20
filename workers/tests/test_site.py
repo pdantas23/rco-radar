@@ -51,3 +51,25 @@ async def test_site_fora_do_ar():
     respx.route(host__regex=r".*fora\.com\.br").mock(return_value=httpx.Response(503))
     r = await verificar("fora.com.br")
     assert r.site_existe and not r.site_responde
+
+
+def test_emails_e_redes():
+    html = """<a href="mailto:Contato@BarbeariaDoZe.com.br">e-mail</a> seuemail@gmail.com
+    logo@2x.png <a href="https://www.tiktok.com/@barbeariadoze">tt</a>
+    <a href="https://youtube.com/@barbeariadoze">yt</a> <a href="https://www.instagram.com/barbeariadoze/">ig</a>"""
+    r = analisar_html(html, "https://ze.com.br/")
+    assert r.emails == ["contato@barbeariadoze.com.br"]
+    assert r.redes == {"tiktok": "barbeariadoze", "youtube": "barbeariadoze", "instagram": "barbeariadoze"}
+
+
+@respx.mock
+async def test_pagina_de_contato_completa_a_home():
+    # url__eq: sem isso o respx casa "https://ze.com.br" com qualquer caminho do host
+    respx.get(url__eq="https://ze.com.br/").mock(return_value=httpx.Response(
+        200, headers={"content-type": "text/html"}, text="<html>home sem contato</html>"))
+    contato = "<html>" + "x" * 600 + '<a href="https://wa.me/5586999998888">zap</a> fale@ze.com.br</html>'
+    respx.get("https://ze.com.br/contato").mock(return_value=httpx.Response(
+        200, headers={"content-type": "text/html"}, text=contato))
+    respx.route(host="ze.com.br").mock(return_value=httpx.Response(404))
+    r = await verificar("ze.com.br")
+    assert r.whatsapp == "+5586999998888" and r.emails == ["fale@ze.com.br"] and r.site_tem_whatsapp

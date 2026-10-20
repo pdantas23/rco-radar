@@ -8,6 +8,7 @@ import httpx
 
 from radar.fontes.apify import rodar_ator
 from radar.fontes.base import FonteInstagram, PerfilInstagram
+from radar.privacidade import limpar
 
 ATOR_PERFIL = "apify/instagram-profile-scraper"
 ATOR_BUSCA = "apify/instagram-search-scraper"
@@ -42,6 +43,7 @@ def converter(item: dict, agora: datetime | None = None) -> PerfilInstagram | No
         bio_tem_link=bool(link),
         bio_tem_whatsapp=bool(WHATS_BIO.search(bio + " " + link)),
         conta_comercial=item.get("isBusinessAccount"),
+        bruto=limpar(item),
     )
 
 
