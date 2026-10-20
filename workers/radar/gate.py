@@ -57,10 +57,12 @@ def checar(texto: str, ctx: Contexto) -> Resultado:
         m.append("disparo sem confirmação humana")
     if not ctx.registrado_em_disparos_leads:
         m.append("envio sem registro prévio em disparos_leads")
-    if ctx.bloqueado or ctx.motivo_descarte == "pediu_para_nao_receber":
-        m.append("lead pediu para não receber")
-    elif ctx.lead_status == "descartado":
-        m.append("lead descartado")
+    # Recusa do lead não bloqueia sozinha (decisão do Philip, 20/10/2026): a empresa decide se e
+    # quando volta a abordar. Só bloqueia o que alguém da agência pôs na lista de bloqueio à mão.
+    if ctx.bloqueado:
+        m.append("número bloqueado pela agência")
+    if ctx.lead_status == "descartado":
+        m.append("lead descartado (reabra antes de contatar)")
     if ctx.primeira_mensagem and ctx.ultimo_contato_mesmo_canal and not ctx.confirmado_recontato:
         if ctx.agora_local_lead - ctx.ultimo_contato_mesmo_canal < timedelta(days=DIAS_RECONTATO):
             m.append(f"já contatado neste canal há menos de {DIAS_RECONTATO} dias")
@@ -84,9 +86,6 @@ def checar(texto: str, ctx: Contexto) -> Resultado:
             m.append("link na primeira mensagem")
         if ctx.tem_midia:
             m.append("mídia na primeira mensagem")
-        # LGPD (F11): opt-out explícito na primeira mensagem
-        if "sair" not in baixo:
-            m.append("primeira mensagem sem opt-out (\"responda SAIR\")")
 
     return Resultado(not m, m)
 
