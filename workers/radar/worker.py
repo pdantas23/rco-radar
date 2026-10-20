@@ -43,7 +43,11 @@ def fontes_reais(conn) -> etapas.Fontes:
     from radar.fontes.cnpj import CnpjCasaDosDados
     from radar.fontes.instagram_apify import InstagramApify
     from radar.fontes.maps_apify import MapsApify
-    return etapas.Fontes(MapsApify(), CnpjCasaDosDados(), InstagramApify(), AnunciosApify(), geocodificador(conn))
+    from radar.fontes.maps_gosom import FonteMapsComReserva, MapsGosom
+    # Maps: gosom no nosso servidor (grátis); Apify assume se o gosom falhar
+    reserva = MapsApify() if os.environ.get("APIFY_TOKEN") else None
+    maps = FonteMapsComReserva(MapsGosom(), reserva)
+    return etapas.Fontes(maps, CnpjCasaDosDados(), InstagramApify(), AnunciosApify(), geocodificador(conn))
 
 
 async def processar_um(conn: psycopg.Connection, f: etapas.Fontes, nome: str,

@@ -20,7 +20,7 @@ class Celula:
 
 
 def grade(lat: float, lng: float, raio_km: float, max_resultados: int,
-          densidade_por_km2: float | None = None) -> list[Celula]:
+          densidade_por_km2: float | None = None, limite_por_consulta: int = LIMITE_POR_CONSULTA) -> list[Celula]:
     """Células cobrindo o círculo (lat, lng, raio_km).
 
     Sem densidade conhecida, cria células suficientes para que cada uma precise
@@ -31,10 +31,10 @@ def grade(lat: float, lng: float, raio_km: float, max_resultados: int,
         raise ValueError("raio_km precisa ser positivo")
     area = math.pi * raio_km ** 2
     esperado = max_resultados if densidade_por_km2 is None else min(max_resultados, densidade_por_km2 * area)
-    if esperado <= LIMITE_POR_CONSULTA:
+    if esperado <= limite_por_consulta:
         return [Celula(lat, lng, raio_km)]
     # margem de 30%: a distribuição nunca é uniforme
-    n_celulas = math.ceil(esperado * 1.3 / LIMITE_POR_CONSULTA)
+    n_celulas = math.ceil(esperado * 1.3 / limite_por_consulta)
     if n_celulas == 1:
         return [Celula(lat, lng, raio_km)]
 

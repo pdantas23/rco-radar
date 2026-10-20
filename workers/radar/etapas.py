@@ -83,8 +83,9 @@ async def minerar(conn: psycopg.Connection, job: fila.Job, f: Fontes) -> None:
         if not ponto:
             raise RuntimeError(f"não achei a cidade {p['lugar_cidade']}-{p['lugar_estado']}")
         lat, lng = ponto
-    celulas = geo.grade(lat, lng, raio, maximo)
-    por_celula = min(geo.LIMITE_POR_CONSULTA * 2, math.ceil(maximo * 1.3 / len(celulas)))
+    limite = getattr(f.maps, "limite_por_consulta", geo.LIMITE_POR_CONSULTA)
+    celulas = geo.grade(lat, lng, raio, maximo, limite_por_consulta=limite)
+    por_celula = min(limite * 2, math.ceil(maximo * 1.3 / len(celulas)))
     termo = p["nicho_texto"] + (f" {p['categoria_maps']}" if p["categoria_maps"] else "")
 
     vistos, aceitos = set(), []
