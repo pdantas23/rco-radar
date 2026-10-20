@@ -124,6 +124,8 @@ async def test_fora_da_janela_nao_envia(conn):
     preparar(conn)
     madrugada = datetime(2026, 10, 20, 6, 0, tzinfo=timezone.utc)                     # 03:00 em São Paulo
     assert await conversa.despachar(conn, FakeComercial(conn), madrugada) == 0
+    # fora da janela o item espera; não vira falha
+    assert {r[0] for r in conn.execute("select status from radar.disparos_leads")} == {"pendente"}
 
 
 async def test_limite_por_hora(conn):
@@ -138,6 +140,8 @@ async def test_sem_confirmacao_nada_sai(conn):
     preparar(conn, confirmado=False)
     com = FakeComercial(conn)
     assert await conversa.despachar(conn, com, AGORA) == 0 and com.envios == []
+    # sem o clique de confirmação o lote nem é processado: os itens seguem pendentes
+    assert {r[0] for r in conn.execute("select status from radar.disparos_leads")} == {"pendente"}
 
 
 async def test_bloqueado_pela_agencia_falha_sem_enviar(conn):
