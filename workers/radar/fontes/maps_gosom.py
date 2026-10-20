@@ -4,9 +4,11 @@ API REST do motor (v1.18.1): POST /api/v1/jobs cria a busca, GET /api/v1/jobs/{i
 devolve o status (pending | working | ok | failed), GET /api/v1/jobs/{id}/download
 devolve um CSV. Campos complexos vêm como JSON dentro da célula.
 
-Bug conhecido (issue #338, aberta em 10/2026): depth >= 3 falha com "target closed";
-depth 1 traz ~20 lugares. Por isso o limite por consulta é 20 e a grade de células
-fica mais fina. Se a busca falhar, a reserva (Apify) assume — ver FonteMapsComReserva.
+Medido na VPS em 20/10/2026 (docs/gosom-teste/RESUMO.md): ~22 lugares/min por núcleo em
+qualquer profundidade; depth 10 traz ~76 lugares por busca em ~3,5 min; 2 núcleos com
+-c 2 chegam a ~35 lugares/min. O bug #338 (depth >= 3 falhar) não ocorreu na v1.18.1.
+Padrão: depth 10 (GOSOM_DEPTH), limite de ~70 lugares por consulta para a grade.
+Se a busca falhar, a reserva (Apify) assume — ver FonteMapsComReserva.
 """
 
 import asyncio
@@ -107,14 +109,16 @@ class MapsGosom(FonteMaps):
     rotulo = "Google Maps (gosom, servidor próprio)"
     env = ("GOSOM_URL",)
     custo_unitario_brl = 0.0
-    limite_por_consulta = 20
 
     def __init__(self, url: str | None = None, client: httpx.AsyncClient | None = None,
-                 espera_seg: float = 5.0, tempo_max_seg: int = 600):
+                 espera_seg: float = 5.0, tempo_max_seg: int = 900, depth: int | None = None):
         self.url = (url or os.environ.get("GOSOM_URL", "http://127.0.0.1:18080")).rstrip("/")
         self.client = client
         self.espera_seg = espera_seg
         self.tempo_max_seg = tempo_max_seg
+        self.depth = depth or int(os.environ.get("GOSOM_DEPTH", "10"))
+        # ~7,6 lugares por nível de profundidade (76 em depth 10), com folga
+        self.limite_por_consulta = max(16, int(self.depth * 7))
 
     async def buscar(self, consulta: ConsultaMaps, uf_padrao: str = "") -> list[NegocioMaps]:
         c = self.client or httpx.AsyncClient(timeout=TIMEOUT)
@@ -122,7 +126,7 @@ class MapsGosom(FonteMaps):
             r = await c.post(f"{self.url}/api/v1/jobs", json={
                 "name": f"radar {consulta.termo}", "keywords": [consulta.termo], "lang": "pt",
                 "zoom": zoom_para_raio(consulta.raio_km), "lat": f"{consulta.lat:.6f}", "lon": f"{consulta.lng:.6f}",
-                "depth": 1, "email": False, "max_time": self.tempo_max_seg})
+                "depth": self.depth, "email": False, "max_time": self.tempo_max_seg})
             if r.status_code >= 400:
                 raise ErroGosom(f"criar job: HTTP {r.status_code} {r.text[:200]}")
             job_id = r.json()["id"]

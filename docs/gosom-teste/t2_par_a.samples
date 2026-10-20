@@ -1,0 +1,11 @@
+t=0 st=pending load=3.67 3.21 2.59 cpu=105.62% mem=35.97MiB / 3GiB
+t=10 st=pending load=3.62 3.20 2.60 cpu=138.46% mem=369.5MiB / 3GiB
+t=19 st=pending load=4.30 3.36 2.65 cpu=216.68% mem=731.5MiB / 3GiB
+t=28 st=pending load=5.31 3.61 2.74 cpu=213.53% mem=1.02GiB / 3GiB
+t=37 st=pending load=5.56 3.72 2.79 cpu=205.55% mem=1.238GiB / 3GiB
+t=46 st=working load=6.38 3.96 2.88 cpu=137.82% mem=216.7MiB / 3GiB
+t=55 st=working load=5.71 3.90 2.87 cpu=443.10% mem=476.1MiB / 3GiB
+t=64 st=working load=5.58 3.90 2.87 cpu=209.65% mem=853.6MiB / 3GiB
+t=73 st=working load=6.17 4.09 2.95 cpu=213.97% mem=1.081GiB / 3GiB
+t=82 st=working load=5.53 4.02 2.94 cpu=206.27% mem=1.324GiB / 3GiB
+t=91 st=ok load=4.68 3.88 2.90 cpu=0.07% mem=28.39MiB / 3GiB

@@ -79,11 +79,12 @@ async def test_fluxo_do_job():
         httpx.Response(200, json={"ID": "j1", "Status": "working"}),
         httpx.Response(200, json={"ID": "j1", "Status": "ok"})])
     respx.get(f"{base}/api/v1/jobs/j1/download").mock(return_value=httpx.Response(200, text=csv_de([linha()])))
-    g = MapsGosom(url=base, espera_seg=0)
+    g = MapsGosom(url=base, espera_seg=0, depth=10)
     r = await g.buscar(ConsultaMaps("barbearia", -5.09, -42.8, 2.0, limite=20))
     assert [n.nome for n in r] == ["Barbearia do Zé"] and g.custo_ultima_chamada == 0
     corpo = json.loads(criar.calls[0].request.content)
-    assert corpo["depth"] == 1 and corpo["lang"] == "pt" and corpo["lat"] == "-5.090000" and corpo["zoom"] == 15
+    assert corpo["depth"] == 10 and corpo["lang"] == "pt" and corpo["lat"] == "-5.090000" and corpo["zoom"] == 15
+    assert g.limite_por_consulta == 70 and corpo["max_time"] == 900
 
 
 class Falha:
