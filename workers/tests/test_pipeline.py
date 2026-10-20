@@ -347,3 +347,28 @@ async def test_plataforma_escolhida_na_pesquisa(conn):
     fontes_usadas = {r[0] for r in conn.execute("select fonte_maps from radar.leads")}
     assert fontes_usadas == {"fake_maps", "fake_maps_pago"}
     assert conn.execute("select fonte from radar.custos_api where operacao = 'buscar' and valor > 0").fetchone()[0] == "fake_maps_pago"
+
+
+
+async def test_proprio_falha_mostra_erro_e_nao_vai_para_a_api(conn):
+    class GosomFora(FakeMaps):
+        async def buscar(self, consulta, uf_padrao=""):
+            raise RuntimeError("playwright: target closed")
+    api = FakeMapsPago([negocio("p1", "Barbearia do Zé")])
+    f = etapas.Fontes(GosomFora([]), FakeCnpj(), FakeInstagram(), FakeAnuncios(), geo, site_sem_site,
+                      mapas={"gosom_maps": GosomFora([]), "apify_maps": api})
+    pid = criar_pesquisa(conn, max_resultados=20)
+    conn.execute("update radar.pesquisas set fonte_maps = 'gosom_maps' where id = %s", (pid,))
+    await rodar_tudo(conn, f)
+    st, = conn.execute("select status from radar.pesquisas where id = %s", (pid,)).fetchone()
+    tentativas, erro = conn.execute("""select tentativas, erro from radar.jobs
+                                       where pesquisa_id = %s and tipo = 'minerar'""", (pid,)).fetchone()
+    assert st == "falhou" and tentativas == 1                     # sem nova tentativa: erro aparece já
+    assert "servidor próprio" in erro and "API (Apify)" in erro and "target closed" in erro
+    assert conn.execute("select count(*) from radar.custos_api where valor > 0").fetchone()[0] == 0   # nada pago
+    # a tela oferece a API: o usuário troca a plataforma e manda de novo
+    conn.execute("update radar.pesquisas set fonte_maps = 'apify_maps', status = 'na_fila' where id = %s", (pid,))
+    fila.enfileirar(conn, "minerar", agency_id=AGENCIA, pesquisa_id=pid)
+    await rodar_tudo(conn, f)
+    assert conn.execute("select status from radar.pesquisas where id = %s", (pid,)).fetchone()[0] == "concluida"
+    assert conn.execute("select count(*) from radar.leads").fetchone()[0] == 1

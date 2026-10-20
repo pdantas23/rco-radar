@@ -40,6 +40,14 @@ class RadarDesligado(Exception):
     """A agência está com o Radar desligado: o job é cancelado, não falha."""
 
 
+class FalhaDoMapsProprio(Exception):
+    """O servidor próprio (gosom) não conseguiu buscar. Não há nova tentativa automática nem ida
+    automática para a API: a pesquisa fica 'falhou' com esta mensagem e a tela oferece a API (Apify)."""
+
+    MENSAGEM = ("O servidor próprio não conseguiu buscar no Google Maps ({detalhe}). "
+                "Você pode tentar de novo mais tarde ou buscar pela API (Apify), que é paga.")
+
+
 class Fontes:
     """Os adaptadores em uso. Trocar uma fonte = passar outro objeto aqui."""
 
@@ -136,9 +144,14 @@ async def minerar(conn: psycopg.Connection, job: fila.Job, f: Fontes) -> None:
         elif previsto and not pode_gastar(conn, ag, previsto):
             log.info("minerar %s: teto da agência atingido, parando a busca", p["id"])
             break
-        negocios = await maps.buscar(ConsultaMaps(termo, cel.lat, cel.lng, cel.raio_km,
-                                                    p["categoria_maps"], por_celula),
-                                       uf_padrao=p["lugar_estado"])
+        try:
+            negocios = await maps.buscar(ConsultaMaps(termo, cel.lat, cel.lng, cel.raio_km,
+                                                      p["categoria_maps"], por_celula),
+                                         uf_padrao=p["lugar_estado"])
+        except Exception as e:
+            if p["fonte_maps"] == "gosom_maps":
+                raise FalhaDoMapsProprio(FalhaDoMapsProprio.MENSAGEM.format(detalhe=f"{type(e).__name__}: {e}"[:300])) from e
+            raise
         custo(conn, ag, maps.chave, "buscar", maps.custo_ultima_chamada, len(negocios), pesquisa_id=p["id"])
         for n in negocios:
             if n.place_id in vistos:

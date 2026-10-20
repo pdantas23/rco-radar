@@ -45,13 +45,15 @@ def fontes_reais(conn) -> etapas.Fontes:
     from radar.fontes.cnpj import CnpjCasaDosDados
     from radar.fontes.instagram_apify import InstagramApify
     from radar.fontes.maps_apify import MapsApify
-    from radar.fontes.maps_gosom import FonteMapsComReserva, MapsGosom
+    from radar.fontes.maps_gosom import MapsGosom
     # Maps: gosom no nosso servidor (grátis); Apify assume se o gosom falhar
     apify = MapsApify() if os.environ.get("APIFY_TOKEN") else None
-    proprio = FonteMapsComReserva(MapsGosom(), apify)        # Apify só entra se o gosom falhar e couber no teto
+    # Próprio NÃO cai sozinho na API (decisão do Philip, 20/10): se falhar, a pesquisa fica 'falhou'
+    # com a mensagem e a tela oferece "buscar pela API (Apify)".
+    proprio = MapsGosom()
     mapas = {"gosom_maps": proprio}
     if apify:
-        mapas["apify_maps"] = apify                          # o usuário escolheu a API (paga)
+        mapas["apify_maps"] = apify
     return etapas.Fontes(proprio, CnpjCasaDosDados(), InstagramApify(), AnunciosApify(), geocodificador(conn),
                          mapas=mapas)
 
@@ -72,7 +74,10 @@ async def processar_um(conn: psycopg.Connection, f: etapas.Fontes, nome: str,
             conn.execute("update radar.pesquisas set status = 'cancelada' where id = %s", (job.pesquisa_id,))
     except Exception as e:                      # noqa: BLE001 — qualquer falha vira retentativa
         log.warning("job %s (%s) falhou: %s", job.id, job.tipo, e)
-        vai_tentar = fila.falhar(conn, job, f"{type(e).__name__}: {e}")
+        if isinstance(e, etapas.FalhaDoMapsProprio):
+            vai_tentar = fila.falhar(conn, job, str(e), definitiva=True)
+        else:
+            vai_tentar = fila.falhar(conn, job, f"{type(e).__name__}: {e}")
         if not vai_tentar and job.lead_id and job.tipo in etapas.AO_FALHAR:
             conn.execute(etapas.AO_FALHAR[job.tipo], (job.lead_id,))
         if not vai_tentar and job.tipo == "minerar" and job.pesquisa_id:

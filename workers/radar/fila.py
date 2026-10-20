@@ -76,9 +76,13 @@ def concluir(conn: psycopg.Connection, job: Job) -> None:
                  (job.id,))
 
 
-def falhar(conn: psycopg.Connection, job: Job, erro: str) -> bool:
-    """Reagenda com backoff exponencial. Devolve True se ainda vai tentar de novo."""
-    if job.tentativas >= job.max_tentativas:
+def falhar(conn: psycopg.Connection, job: Job, erro: str, definitiva: bool = False) -> bool:
+    """Reagenda com backoff exponencial. Devolve True se ainda vai tentar de novo.
+
+    definitiva=True: não tenta de novo (ex.: o servidor próprio do Maps falhou e a decisão
+    de ir para a API é do usuário, na tela).
+    """
+    if definitiva or job.tentativas >= job.max_tentativas:
         conn.execute("update radar.jobs set status = 'falhou', erro = %s, concluido_em = now() where id = %s",
                      (erro[:2000], job.id))
         return False
