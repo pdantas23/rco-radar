@@ -1,4 +1,8 @@
-# Subir os robôs e o gosom na VPS (proposta — nada aplicado)
+# Subir os robôs e o gosom na VPS
+
+Decisão (20/10/2026): serviço do tipo **Compose** no EasyPanel, lendo `docker-compose.yml` da raiz do repo
+(robôs + gosom na rede do banco interno, sem porta publicada). O texto abaixo é o plano original.
+
 
 Precisa de aprovação do Philip antes de cada passo (mudança de infra em produção).
 

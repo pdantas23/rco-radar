@@ -1,0 +1,61 @@
+# RCO Radar na VPS — serviço do tipo "Compose" no EasyPanel (projeto `servicos`, serviço `radar`).
+#
+# Por que Compose: o banco interno (instância `supabase`) fica na rede bridge `supabase_supabase_default`,
+# que serviços comuns do EasyPanel (Swarm) não alcançam. Um serviço Compose entra nessa rede sem abrir
+# porta nenhuma. Nada aqui publica porta no host.
+#
+# Variáveis (definidas na aba Environment do serviço no EasyPanel, nunca no git):
+#   RADAR_DB_PASSWORD      senha do usuário radar_worker (está em /root/radar/radar_worker.env na VPS)
+#   RADAR_INTERNAL_SECRET  segredo das rotas internas do COMERCIAL (o mesmo valor no serviço do COMERCIAL)
+#   ENCRYPTION_KEY         a MESMA do serviço do COMERCIAL (decifra a chave de IA da agência)
+#   COMERCIAL_URL          ex.: https://comercial.rcoacademy.com.br
+#   APIFY_TOKEN, CASADOSDADOS_API_KEY   (opcionais; sem elas o Maps vai pelo gosom e o resto fica "não verificado")
+
+services:
+  worker:
+    build: ./workers
+    restart: unless-stopped
+    environment:
+      RADAR_DATABASE_URL: postgresql://radar_worker:${RADAR_DB_PASSWORD}@db:5432/postgres
+      GOSOM_URL: http://gosom:8080
+      GOSOM_DEPTH: "10"
+      COMERCIAL_URL: ${COMERCIAL_URL}
+      RADAR_INTERNAL_SECRET: ${RADAR_INTERNAL_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      APIFY_TOKEN: ${APIFY_TOKEN:-}
+      CASADOSDADOS_API_KEY: ${CASADOSDADOS_API_KEY:-}
+      # despachante + conversador (Fase 3): ligado em UMA réplica só — o ritmo de envio depende disso
+      RADAR_CONTATO: "1"
+    cpus: 0.5
+    mem_limit: 512m
+    depends_on: [gosom]
+    networks: [radar, supabase]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  gosom:
+    # motor do Google Maps (grátis). Medido em 20/10/2026: 2 núcleos, ~35 lugares/min, carga máx. 6,4.
+    image: gosom/google-maps-scraper:v1.18.1
+    command: ["-web", "-data-folder", "/gmapsdata", "-c", "2"]
+    restart: unless-stopped
+    cpus: 2
+    mem_limit: 3g
+    memswap_limit: 3g
+    volumes:
+      - gosom_data:/gmapsdata
+    networks: [radar]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+networks:
+  radar: {}
+  supabase:
+    external: true
+    name: supabase_supabase_default
+
+volumes:
+  gosom_data:
+    external: true
+    name: radar_gosom_data    # o mesmo volume dos testes de 20/10 (já existe na VPS)
