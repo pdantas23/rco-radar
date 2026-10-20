@@ -68,7 +68,7 @@
   <h1>RCO Radar</h1>
   <div class="sub">Escopo técnico · resposta ao levantamento v1.0 de 17/10/2026</div>
   <div class="meta">
-    <div><b>VERSÃO</b>1.0 · 20/10/2026</div>
+    <div><b>VERSÃO</b>1.0 · 19/10/2026</div>
     <div><b>PARA</b>Luis · debate de 21/10</div>
     <div><b>O QUE ESTE DOCUMENTO TRAZ</b>Como fazer, quanto custa, quanto tempo leva</div>
     <div><b>LEGENDA</b><span class="tag t-rec">RECOMENDADO</span> <span class="tag t-dec">LUIS DECIDE</span> <span class="tag t-mud">MUDA O PEDIDO</span></div>
@@ -79,13 +79,13 @@
 <div class="grid3" style="margin-bottom: 10px;">
   <div class="num"><b>≈ R$ 0,08</b><span>por lead minerado e enriquecido<br>(R$ 65 a 85 a cada 1.000 leads)</span></div>
   <div class="num"><b>≈ R$ 5 a 8</b><span>por lead qualificado, usando o funil do exemplo do levantamento</span></div>
-  <div class="num"><b>≈ 13 semanas</b><span>para as 3 fases, com 1 pessoa dedicada. Fase 1 entregue em cerca de 5 semanas</span></div>
+  <div class="num"><b>1 semana</b><span>para as 3 fases. Fase 1 pronta em 3 dias, com frentes trabalhando em paralelo</span></div>
 </div>
 <ul>
   <li><b>Dá para fazer tudo o que o levantamento pede</b>, com 3 ajustes que vêm de regras das plataformas, não de escolha nossa (próxima seção).</li>
   <li><b>O sistema roda na estrutura que a RCO já tem</b> (servidor e banco de dados). Não precisa contratar servidor novo.</li>
   <li><b>O que mais pesa no custo é buscar e enriquecer os negócios</b>, não a IA. A conversa da IA sai por cerca de R$ 0,02 por lead.</li>
-  <li><b>Já começamos:</b> o banco de dados está desenhado e as regras mais delicadas (pontuação, casamento com CNPJ, trava antes de enviar) estão escritas e testadas.</li>
+  <li><b>Já começamos:</b> o banco de dados está desenhado e as regras mais delicadas (pontuação, casamento com CNPJ, trava antes de enviar) estão escritas e testadas. A Fase 1 começa agora.</li>
 </ul>
 
 <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>3 coisas que mudam o que foi pedido</h2>
@@ -164,31 +164,29 @@
 </ul>
 
 <!-- ───────── Página 5 ───────── -->
-<h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Prazo por fase e sprints de 1 semana</h2>
-<p>Estimativa com 1 pessoa dedicada. As datas entram no ClickUp depois deste debate.</p>
+<h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Prazo: 1 semana</h2>
+<p>O desenvolvimento é feito com agentes de IA trabalhando em frentes paralelas, e a Fase 3 reaproveita o que já funciona no CRM da RCO (WhatsApp e agente de IA). As tarefas entram no ClickUp depois deste debate.</p>
 <div class="grid3">
   <div>
-    <div class="fase">Fase 1 · Minerar e enriquecer · ≈ 5 semanas</div>
-    <div class="sprint"><b>S1</b><span>Base: banco, login, tela de pesquisa, fila <span class="tag t-ok">ADIANTADO</span></span></div>
-    <div class="sprint"><b>S2</b><span>Busca no Maps, dividindo a cidade em áreas para passar de 60 resultados</span></div>
-    <div class="sprint"><b>S3</b><span>CNPJ e faturamento estimado</span></div>
-    <div class="sprint"><b>S4</b><span>Site, Instagram e anúncios</span></div>
-    <div class="sprint"><b>S5</b><span>Ficha (só leitura) e exportar CSV · <b>entrega</b></span></div>
+    <div class="fase">Fase 1 · Minerar e enriquecer · 3 dias</div>
+    <div class="sprint"><b>Dia 1</b><span>Busca no Google Maps (passando de 60 resultados), login e tela de pesquisa com custo antes de rodar</span></div>
+    <div class="sprint"><b>Dia 2</b><span>CNPJ, faturamento estimado e leitura do site</span></div>
+    <div class="sprint"><b>Dia 3</b><span>Instagram, anúncios, ficha e exportar CSV · <b>entrega</b></span></div>
   </div>
   <div>
-    <div class="fase">Fase 2 · Pontuar, revisar, medir · ≈ 3 semanas</div>
-    <div class="sprint"><b>S6</b><span>Pontuação e tela de pesos por nicho</span></div>
-    <div class="sprint"><b>S7</b><span>Lista com filtros, ficha completa, CSV de remarketing</span></div>
-    <div class="sprint"><b>S8</b><span>Dashboard · <b>entrega</b></span></div>
+    <div class="fase">Fase 2 · Pontuar, revisar, medir · 2 dias</div>
+    <div class="sprint"><b>Dia 1</b><span>Nota do lead, tela de pesos por nicho, lista com filtros</span></div>
+    <div class="sprint"><b>Dia 2</b><span>Ficha completa, dashboard e CSV de remarketing · <b>entrega</b></span></div>
+    <p class="legenda" style="margin-top: 4px;">Feita em paralelo à Fase 1, por outra frente.</p>
   </div>
   <div>
-    <div class="fase">Fase 3 · Contato por IA · ≈ 5 semanas</div>
-    <div class="sprint"><b>S9</b><span>Números de envio, disparo com confirmação, fila</span></div>
-    <div class="sprint"><b>S10</b><span>IA conversando e coletando os campos</span></div>
-    <div class="sprint"><b>S11</b><span>Acompanhamentos, assumir conversa, SAIR, áudio</span></div>
-    <div class="sprint"><b>S12</b><span>Entrega ao comercial e testes reais</span></div>
-    <div class="sprint"><b>S13</b><span>Ajustes · <b>entrega</b></span></div>
+    <div class="fase">Fase 3 · Contato por IA · 2 dias</div>
+    <div class="sprint"><b>Dia 1</b><span>Disparo com confirmação e IA conversando e coletando os campos</span></div>
+    <div class="sprint"><b>Dia 2</b><span>Acompanhamentos, SAIR, assumir conversa, entrega ao comercial · <b>entrega</b></span></div>
   </div>
+</div>
+<div class="alerta" style="margin-top: 10px;">
+  <b>O que corre em paralelo e não depende de programação:</b> criar as contas nos fornecedores de dados, comprar os chips de WhatsApp do Radar e aquecer os números (1 a 2 semanas de uso leve antes de disparar em volume), escrever com o Luis os textos das abordagens e da IA, e testar com leads reais. O sistema fica pronto em 1 semana; o disparo em volume acompanha o aquecimento dos números.
 </div>
 
 <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Riscos e como tratamos cada um</h2>
