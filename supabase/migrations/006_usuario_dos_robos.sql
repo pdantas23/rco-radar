@@ -1,6 +1,6 @@
 -- RCO Radar — 006: usuário próprio dos robôs no banco (em vez da senha geral do Postgres)
 --
--- NÃO APLICADA. Acesso mínimo: tudo no schema radar; do COMERCIAL, só LEITURA das tabelas que
+-- JÁ APLICADA EM PRODUÇÃO em 2026-10-20 23:36:57 UTC (instância `supabase`, aprovada pelo Philip; senha definida na VPS, fora do repo). Acesso mínimo: tudo no schema radar; do COMERCIAL, só LEITURA das tabelas que
 -- os robôs usam (nome da agência, config e chave da IA, mensagens do inbox). Nada em contatos,
 -- negócios, conversas ou demais tabelas: isso passa pelas rotas internas do COMERCIAL.
 -- BYPASSRLS: as policies do radar são para usuários logados (authenticated); os robôs operam
