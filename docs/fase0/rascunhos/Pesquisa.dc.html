@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Pesquisa</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F4F5F7}
+a{color:#1B2A7A}a:hover{color:#0E1650}
+</style>
+</helmet>
+<div style="font-family: Inter, system-ui, sans-serif; color: #1A1D24; background: #F4F5F7; min-height: 100%;">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 24px; background: #FFFFFF; border-bottom: 1px solid #D5D9E0; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="width: 28px; height: 28px; border-radius: 50%; border: 2px solid #1B2A7A;"></div>
+      <strong style="font-size: 17px;">RCO Radar</strong>
+    </div>
+    <span style="font-size: 13px; color: #5A6170;">Ana · operadora</span>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; align-items: flex-start;">
+    <nav aria-label="Menu" style="flex: 1 1 200px; max-width: 220px; padding: 20px 12px; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box;">
+      <a href="Main.dc.html" style="padding: 10px 12px; border-radius: 8px; text-decoration: none; font-size: 14px; color: #1A1D24;">Dashboard</a>
+      <a href="Pesquisa.dc.html" style="padding: 10px 12px; border-radius: 8px; background: #1B2A7A; color: #FFFFFF; text-decoration: none; font-size: 14px; font-weight: 600;">Pesquisas</a>
+      <a href="Lista.dc.html" style="padding: 10px 12px; border-radius: 8px; text-decoration: none; font-size: 14px; color: #1A1D24;">Leads</a>
+      <span style="padding: 10px 12px; font-size: 14px;">Disparos</span>
+      <span style="padding: 10px 12px; font-size: 14px;">Conversas</span>
+      <span style="padding: 10px 12px; font-size: 14px;">Configuração</span>
+    </nav>
+
+    <main style="flex: 999 1 560px; min-width: 0; padding: 20px 24px 40px; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box;">
+      <h1 style="margin: 0; font-size: 24px;">Nova pesquisa</h1>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start;">
+
+        <form style="flex: 999 1 480px; min-width: 0; display: flex; flex-direction: column; gap: 16px;">
+
+          <fieldset style="margin: 0; background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+            <legend style="font-weight: 600; font-size: 15px; padding: 0 4px;">1 · O que procurar</legend>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
+              <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">Nicho (texto livre)
+                <input type="text" value="barbearia" style="font: inherit; padding: 10px 12px; border: 1px solid #C4C9D2; border-radius: 8px; min-height: 44px; box-sizing: border-box;">
+              </label>
+              <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">Categoria do Google Maps (opcional)
+                <select style="font: inherit; padding: 10px 12px; border: 1px solid #C4C9D2; border-radius: 8px; min-height: 44px; background: #FFFFFF;"><option>Barbearia</option></select>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset style="margin: 0; background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+            <legend style="font-weight: 600; font-size: 15px; padding: 0 4px;">2 · Onde procurar</legend>
+            <div role="radiogroup" aria-label="Tipo de lugar" style="display: flex; flex-wrap: wrap; gap: 8px;">
+              <button type="button" style="font: inherit; font-size: 13px; padding: 8px 14px; min-height: 40px; border-radius: 20px; border: 1px solid #C4C9D2; background: #FFFFFF;">Cidade / bairro</button>
+              <button type="button" style="font: inherit; font-size: 13px; padding: 8px 14px; min-height: 40px; border-radius: 20px; border: 2px solid #1B2A7A; background: #E8EBF6; font-weight: 600;">Ponto no mapa + raio</button>
+              <button type="button" style="font: inherit; font-size: 13px; padding: 8px 14px; min-height: 40px; border-radius: 20px; border: 1px solid #C4C9D2; background: #FFFFFF;">Lista de cidades (Brasil inteiro)</button>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px;">
+              <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">Estado (obrigatório)
+                <select style="font: inherit; padding: 10px 12px; border: 1px solid #C4C9D2; border-radius: 8px; min-height: 44px; background: #FFFFFF;"><option>PI</option></select>
+              </label>
+              <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">Cidade
+                <input type="text" value="Teresina" style="font: inherit; padding: 10px 12px; border: 1px solid #C4C9D2; border-radius: 8px; min-height: 44px; box-sizing: border-box;">
+              </label>
+              <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">Raio (km)
+                <input type="text" value="15" style="font: inherit; padding: 10px 12px; border: 1px solid #C4C9D2; border-radius: 8px; min-height: 44px; box-sizing: border-box;">
+              </label>
+            </div>
+            <div aria-label="Mapa" style="height: 240px; border-radius: 8px; background: #E3E6EB; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;">
+              <div style="width: 180px; height: 180px; border-radius: 50%; border: 2px dashed #1B2A7A; background: rgba(27,42,122,0.08);"></div>
+              <span style="position: absolute; bottom: 10px; left: 12px; font-size: 12px; color: #3F4654;">Mapa · clique para mover o ponto, arraste a borda para mudar o raio</span>
+            </div>
+          </fieldset>
+
+          <fieldset style="margin: 0; background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+            <legend style="font-weight: 600; font-size: 15px; padding: 0 4px;">3 · Filtros antes da busca</legend>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px;">
+              <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">Máximo de resultados
+                <input type="text" value="200" style="font: inherit; padding: 10px 12px; border: 1px solid #C4C9D2; border-radius: 8px; min-height: 44px; box-sizing: border-box;">
+              </label>
+              <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">Nota mínima no Google
+                <input type="text" value="4,0" style="font: inherit; padding: 10px 12px; border: 1px solid #C4C9D2; border-radius: 8px; min-height: 44px; box-sizing: border-box;">
+              </label>
+              <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">Mínimo de avaliações
+                <input type="text" value="0" style="font: inherit; padding: 10px 12px; border: 1px solid #C4C9D2; border-radius: 8px; min-height: 44px; box-sizing: border-box;">
+              </label>
+            </div>
+            <span style="font-size: 12px; color: #5A6170;">Os outros filtros (faturamento, anúncio, site, Instagram, WhatsApp, CNPJ) ficam na lista de leads, depois do enriquecimento.</span>
+          </fieldset>
+        </form>
+
+        <aside style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 12px;">
+          <section style="background: #FFFFFF; border: 2px solid #1B2A7A; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+            <h2 style="margin: 0; font-size: 15px;">Antes de rodar</h2>
+            <span style="font-size: 13px;"><strong>barbearia · Teresina · 19/10</strong></span>
+            <ul style="margin: 0; padding-left: 18px; font-size: 13px; display: flex; flex-direction: column; gap: 4px;">
+              <li>200 consultas Google Maps</li>
+              <li>200 consultas de CNPJ</li>
+              <li>200 verificações de anúncio</li>
+            </ul>
+            <div style="display: flex; justify-content: space-between; font-size: 14px; border-top: 1px solid #EEF0F3; padding-top: 10px;">
+              <span>Custo estimado</span><strong>R$ [valor]</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #5A6170;">
+              <span>Seu limite hoje</span><span>R$ [usado] de R$ [limite]</span>
+            </div>
+          </section>
+
+          <section role="alert" style="background: #FFF6E5; border: 1px solid #E0B65A; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+            <strong>Pesquisa parecida nos últimos 30 dias</strong>
+            <span>"barbearia · Teresina" rodada em 02/10 por Luis (143 leads). Os leads que já existem não são duplicados, só vinculados.</span>
+            <label style="display: flex; gap: 8px; align-items: center;"><input type="checkbox" style="width: 18px; height: 18px;"> Entendi, rodar mesmo assim</label>
+          </section>
+
+          <button type="button" style="font: inherit; font-weight: 600; font-size: 15px; padding: 14px; min-height: 48px; border-radius: 10px; border: none; background: #1B2A7A; color: #FFFFFF;">Pesquisar</button>
+          <span style="font-size: 12px; color: #5A6170;">A busca roda em segundo plano. Pode fechar a tela; a lista vai enchendo sozinha.</span>
+        </aside>
+      </div>
+
+      <section style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+        <h2 style="margin: 0; font-size: 15px;">Pesquisas salvas</h2>
+        <div style="overflow-x: auto;">
+          <table style="border-collapse: collapse; width: 100%; min-width: 680px; font-size: 13px;">
+            <thead><tr style="text-align: left; color: #5A6170;">
+              <th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Nome</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Data</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Quem</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Encontrados</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Aprovados</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Situação</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0;"><span style="position: absolute; left: -9999px;">Ações</span></th>
+            </tr></thead>
+            <tbody>
+              <sc-for list="{{salvas}}" as="p" hint-placeholder-count="3">
+                <tr>
+                  <td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{p.nome}}</td><td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{p.data}}</td><td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{p.quem}}</td><td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{p.enc}}</td><td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{p.apr}}</td><td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{p.sit}}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #EEF0F3; text-align: right;"><button type="button" style="font: inherit; font-size: 13px; padding: 6px 12px; min-height: 36px; border: 1px solid #C4C9D2; border-radius: 8px; background: #FFFFFF;">Rodar de novo</button></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1320}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      salvas: [
+        { nome: 'barbearia · Teresina · 17/10', data: '17/10/2026', quem: 'Ana', enc: '128', apr: '31', sit: 'Concluída' },
+        { nome: 'barbearia · Teresina · 02/10', data: '02/10/2026', quem: 'Luis', enc: '143', apr: '[nº]', sit: 'Concluída' },
+        { nome: '[nicho] · [cidade] · [data]', data: '[data]', quem: '[nome]', enc: '[nº]', apr: '[nº]', sit: 'Enriquecendo 64/128' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

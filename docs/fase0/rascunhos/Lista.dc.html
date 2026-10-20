@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Lista de leads</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F4F5F7}
+a{color:#1B2A7A}a:hover{color:#0E1650}
+</style>
+</helmet>
+<div style="font-family: Inter, system-ui, sans-serif; color: #1A1D24; background: #F4F5F7; min-height: 100%;">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 24px; background: #FFFFFF; border-bottom: 1px solid #D5D9E0; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="width: 28px; height: 28px; border-radius: 50%; border: 2px solid #1B2A7A;"></div>
+      <strong style="font-size: 17px;">RCO Radar</strong>
+    </div>
+    <span style="font-size: 13px; color: #5A6170;">Ana · operadora</span>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; align-items: flex-start;">
+    <nav aria-label="Menu" style="flex: 1 1 200px; max-width: 220px; padding: 20px 12px; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box;">
+      <a href="Main.dc.html" style="padding: 10px 12px; border-radius: 8px; text-decoration: none; font-size: 14px; color: #1A1D24;">Dashboard</a>
+      <a href="Pesquisa.dc.html" style="padding: 10px 12px; border-radius: 8px; text-decoration: none; font-size: 14px; color: #1A1D24;">Pesquisas</a>
+      <a href="Lista.dc.html" style="padding: 10px 12px; border-radius: 8px; background: #1B2A7A; color: #FFFFFF; text-decoration: none; font-size: 14px; font-weight: 600;">Leads</a>
+      <span style="padding: 10px 12px; font-size: 14px;">Disparos</span>
+      <span style="padding: 10px 12px; font-size: 14px;">Conversas</span>
+      <span style="padding: 10px 12px; font-size: 14px;">Configuração</span>
+    </nav>
+
+    <main style="flex: 999 1 560px; min-width: 0; padding: 20px 24px 40px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box;">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <h1 style="margin: 0; font-size: 24px;">Leads <span style="font-size: 15px; font-weight: 400; color: #5A6170;">31 de 1.240 com os filtros</span></h1>
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px;">Buscar
+          <input type="search" placeholder="nome, @, telefone" style="font: inherit; padding: 8px 12px; border: 1px solid #C4C9D2; border-radius: 8px; min-height: 40px;">
+        </label>
+      </div>
+
+      <section aria-label="Filtros" style="display: flex; flex-wrap: wrap; gap: 8px;">
+        <sc-for list="{{filtros}}" as="f" hint-placeholder-count="10">
+          <button type="button" style="{{f.estilo}}">{{f.texto}}</button>
+        </sc-for>
+        <button type="button" style="font: inherit; font-size: 13px; padding: 6px 12px; min-height: 36px; border: none; background: none; color: #1B2A7A; text-decoration: underline;">+ mais filtros</button>
+      </section>
+
+      <section aria-label="Categorias do Maps nesta lista" style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px;">
+        <span style="color: #5A6170;">Categorias do Maps:</span>
+        <span style="padding: 4px 10px; border-radius: 6px; background: #E3E6EB;">Barbearia (28)</span>
+        <span style="padding: 4px 10px; border-radius: 6px; background: #E3E6EB;">Salão de beleza (3) <button type="button" aria-label="Excluir categoria Salão de beleza" style="border: none; background: none; font: inherit; cursor: pointer; padding: 0 0 0 4px;">✕</button></span>
+        <span style="color: #5A6170;">Excluir uma categoria tira em lote todos os leads dela</span>
+      </section>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start;">
+
+        <section style="flex: 999 1 560px; min-width: 0; background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; display: flex; flex-direction: column;">
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; background: #E8EBF6; border-bottom: 1px solid #D5D9E0; border-radius: 10px 10px 0 0; font-size: 13px;">
+            <strong>31 selecionados</strong>
+            <button type="button" style="font: inherit; font-size: 13px; font-weight: 600; padding: 6px 12px; min-height: 36px; border: none; border-radius: 8px; background: #1B2A7A; color: #FFFFFF;">Aprovar para contato</button>
+            <button type="button" style="font: inherit; font-size: 13px; padding: 6px 12px; min-height: 36px; border: 1px solid #C4C9D2; border-radius: 8px; background: #FFFFFF;">Descartar</button>
+            <button type="button" style="font: inherit; font-size: 13px; padding: 6px 12px; min-height: 36px; border: 1px solid #C4C9D2; border-radius: 8px; background: #FFFFFF;">Verificar anúncios</button>
+            <button type="button" style="font: inherit; font-size: 13px; padding: 6px 12px; min-height: 36px; border: 1px solid #C4C9D2; border-radius: 8px; background: #FFFFFF;">Exportar remarketing</button>
+            <button type="button" style="font: inherit; font-size: 13px; padding: 6px 12px; min-height: 36px; border: 1px solid #C4C9D2; border-radius: 8px; background: #FFFFFF;">Enviar ao comercial</button>
+          </div>
+          <div style="overflow-x: auto;">
+            <table style="border-collapse: collapse; width: 100%; min-width: 900px; font-size: 13px;">
+              <thead><tr style="text-align: left; color: #5A6170;">
+                <th style="padding: 8px 10px; border-bottom: 1px solid #D5D9E0;"><input type="checkbox" checked aria-label="Selecionar todos" style="width: 18px; height: 18px;"></th>
+                <th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Nome ↕</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Cidade</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Nicho</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Nota ↓</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Classe</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Fat. estimado</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Anúncio</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Presença</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Canais</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Status</th>
+              </tr></thead>
+              <tbody>
+                <sc-for list="{{leads}}" as="l" hint-placeholder-count="8">
+                  <tr>
+                    <td style="padding: 8px 10px; border-bottom: 1px solid #EEF0F3;"><input type="checkbox" checked aria-label="Selecionar" style="width: 18px; height: 18px;"></td>
+                    <td style="padding: 8px; border-bottom: 1px solid #EEF0F3;"><a href="Ficha.dc.html" style="font-weight: 600;">{{l.nome}}</a></td>
+                    <td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{l.cidade}}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{l.nicho}}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #EEF0F3; font-weight: 700;">{{l.nota}}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #EEF0F3;"><span style="{{l.classeEstilo}}">{{l.classe}}</span></td>
+                    <td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{l.fat}}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{l.anuncio}}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{l.presenca}}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{l.canais}}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #EEF0F3; color: #5A6170;">{{l.status}}</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+          <span style="padding: 10px 12px; font-size: 12px; color: #5A6170;">Frios continuam na lista, só aparecem por último. No celular, cada linha vira um cartão com nome, nota, anúncio e canais.</span>
+        </section>
+
+        <aside aria-label="Aprovar para contato" style="flex: 1 1 320px; min-width: 0; background: #FFFFFF; border: 2px solid #1B2A7A; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; box-sizing: border-box;">
+          <h2 style="margin: 0; font-size: 16px;">Aprovar 31 leads para contato</h2>
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">Canal
+            <select style="font: inherit; padding: 10px 12px; border: 1px solid #C4C9D2; border-radius: 8px; min-height: 44px; background: #FFFFFF;"><option>WhatsApp não oficial</option><option>WhatsApp oficial</option><option>DM Instagram</option></select>
+          </label>
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">Abordagem (primeira mensagem)
+            <select style="font: inherit; padding: 10px 12px; border: 1px solid #C4C9D2; border-radius: 8px; min-height: 44px; background: #FFFFFF;"><option>Sem anúncio ativo</option><option>Já anuncia</option><option>Presença digital fraca</option></select>
+          </label>
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">Número de origem
+            <select style="font: inherit; padding: 10px 12px; border: 1px solid #C4C9D2; border-radius: 8px; min-height: 44px; background: #FFFFFF;"><option>Número 2 · saúde ok</option></select>
+          </label>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;">
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">Intervalo (seg)
+              <input type="text" value="90" style="font: inherit; padding: 10px 12px; border: 1px solid #C4C9D2; border-radius: 8px; min-height: 44px; box-sizing: border-box; width: 100%;">
+            </label>
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">Limite por hora
+              <input type="text" value="40" style="font: inherit; padding: 10px 12px; border: 1px solid #C4C9D2; border-radius: 8px; min-height: 44px; box-sizing: border-box; width: 100%;">
+            </label>
+          </div>
+
+          <div style="background: #F4F5F7; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px; font-size: 13px;">
+            <strong>Resumo</strong>
+            <span>31 leads · WhatsApp não oficial · número 2</span>
+            <span>1 a cada 90 s, até 40 por hora, só das 8h às 20h</span>
+            <span>Previsão de término: hoje, [hora]</span>
+            <span style="color: #8A5A00;">2 leads já contatados neste canal há menos de 30 dias: confirmar de novo</span>
+            <span style="color: #5A6170;">1 lead pediu para não receber: fica de fora</span>
+          </div>
+
+          <div style="border: 1px dashed #9AA1AD; border-radius: 8px; padding: 10px; font-size: 13px; display: flex; flex-direction: column; gap: 4px;">
+            <span style="color: #5A6170; font-size: 12px;">Prévia da primeira mensagem</span>
+            <span>"Oi, falo com o responsável pela Barbearia do Zé? Vi que vocês têm nota 4,6 no Google… Se não quiser receber, responda SAIR."</span>
+          </div>
+
+          <button type="button" style="font: inherit; font-weight: 600; font-size: 15px; padding: 14px; min-height: 48px; border-radius: 10px; border: none; background: #1B2A7A; color: #FFFFFF;">Confirmar envio</button>
+          <span style="font-size: 12px; color: #5A6170;">Nada sai sem este clique. Depois a fila aparece em Disparos, com Pausar e Cancelar pendentes.</span>
+        </aside>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const pill = (on) => 'font: inherit; font-size: 13px; padding: 6px 12px; min-height: 36px; border-radius: 18px; ' +
+      (on ? 'border: 2px solid #1B2A7A; background: #E8EBF6; font-weight: 600;' : 'border: 1px solid #C4C9D2; background: #FFFFFF;');
+    const classe = {
+      Quente: 'padding: 2px 8px; border-radius: 6px; background: #1B2A7A; color: #FFFFFF; font-weight: 600;',
+      Morno: 'padding: 2px 8px; border-radius: 6px; border: 1px solid #1B2A7A; color: #1B2A7A; font-weight: 600;',
+      Frio: 'padding: 2px 8px; border-radius: 6px; background: #EEF0F3; color: #3F4654;'
+    };
+    const l = (nome, nota, c, fat, anuncio, presenca, canais) => ({
+      nome, cidade: 'Teresina-PI', nicho: 'barbearia', nota, classe: c, classeEstilo: classe[c],
+      fat, anuncio, presenca, canais, status: 'pontuado'
+    });
+    return {
+      filtros: [
+        { texto: 'Teresina-PI ✕', estilo: pill(true) }, { texto: 'barbearia ✕', estilo: pill(true) },
+        { texto: 'Quente ✕', estilo: pill(true) }, { texto: 'Sem anúncio ✕', estilo: pill(true) },
+        { texto: 'Tem WhatsApp ✕', estilo: pill(true) }, { texto: 'Faturamento ▾', estilo: pill(false) },
+        { texto: 'Nº de anúncios ▾', estilo: pill(false) }, { texto: 'Tem site ▾', estilo: pill(false) },
+        { texto: 'Tem Instagram ▾', estilo: pill(false) }, { texto: 'CNPJ encontrado ▾', estilo: pill(false) }
+      ],
+      leads: [
+        l('Barbearia do Zé', '95', 'Quente', '30–80 mil', 'Sem anúncio', 'Média', 'WhatsApp · Instagram'),
+        l('[Barbearia 2]', '88', 'Quente', '30–80 mil', 'Sem anúncio', 'Forte', 'WhatsApp · Instagram'),
+        l('[Barbearia 3]', '80', 'Quente', 'sem estimativa', 'Sem anúncio', 'Média', 'WhatsApp'),
+        l('[Barbearia 4]', '76', 'Quente', '80–200 mil', 'Sem anúncio', 'Fraca', 'WhatsApp'),
+        l('[Barbearia 5]', '72', 'Quente', 'até 30 mil', 'Sem anúncio', 'Média', 'WhatsApp · Instagram'),
+        l('[Barbearia 6]', '70', 'Quente', '30–80 mil', 'Sem anúncio', 'Média', 'WhatsApp')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Dashboard</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F4F5F7}
+a{color:#1B2A7A}a:hover{color:#0E1650}
+</style>
+</helmet>
+<div style="font-family: Inter, system-ui, sans-serif; color: #1A1D24; background: #F4F5F7; min-height: 100%;">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 24px; background: #FFFFFF; border-bottom: 1px solid #D5D9E0; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="width: 28px; height: 28px; border-radius: 50%; border: 2px solid #1B2A7A;"></div>
+      <strong style="font-size: 17px;">RCO Radar</strong>
+    </div>
+    <span style="font-size: 13px; color: #5A6170;">Luis · admin</span>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; align-items: flex-start;">
+    <nav aria-label="Menu" style="flex: 1 1 200px; max-width: 220px; padding: 20px 12px; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box;">
+      <a href="Main.dc.html" style="padding: 10px 12px; border-radius: 8px; background: #1B2A7A; color: #FFFFFF; text-decoration: none; font-size: 14px; font-weight: 600;">Dashboard</a>
+      <a href="Pesquisa.dc.html" style="padding: 10px 12px; border-radius: 8px; text-decoration: none; font-size: 14px; color: #1A1D24;">Pesquisas</a>
+      <a href="Lista.dc.html" style="padding: 10px 12px; border-radius: 8px; text-decoration: none; font-size: 14px; color: #1A1D24;">Leads</a>
+      <span style="padding: 10px 12px; font-size: 14px;">Disparos</span>
+      <span style="padding: 10px 12px; font-size: 14px;">Conversas</span>
+      <span style="padding: 10px 12px; font-size: 14px;">Configuração</span>
+    </nav>
+
+    <main style="flex: 999 1 560px; min-width: 0; padding: 20px 24px 40px; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box;">
+
+      <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap;">
+        <h1 style="margin: 0; font-size: 24px;">Dashboard</h1>
+        <span style="font-size: 12px; color: #5A6170;">Passe o mouse em qualquer número para ver a definição</span>
+      </div>
+
+      <section aria-label="Filtros" style="display: flex; flex-wrap: wrap; gap: 8px;">
+        <sc-for list="{{filtros}}" as="f" hint-placeholder-count="6">
+          <button type="button" style="display: flex; gap: 8px; align-items: center; padding: 8px 12px; min-height: 40px; border: 1px solid #C4C9D2; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px; color: #1A1D24;">
+            <span style="color: #5A6170;">{{f.rotulo}}</span><strong style="font-weight: 600;">{{f.valor}}</strong><span aria-hidden="true">▾</span>
+          </button>
+        </sc-for>
+      </section>
+
+      <section aria-label="Números" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px;">
+        <sc-for list="{{cartoes}}" as="c" hint-placeholder-count="11">
+          <div style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="font-size: 12px; color: #5A6170; display: flex; justify-content: space-between;">{{c.rotulo}}<span aria-hidden="true" style="border: 1px solid #9AA1AD; border-radius: 50%; width: 14px; height: 14px; font-size: 10px; text-align: center; line-height: 14px;">i</span></span>
+            <span style="font-size: 26px; font-weight: 700;">{{c.valor}}</span>
+          </div>
+        </sc-for>
+      </section>
+
+      <section aria-label="Taxas" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px;">
+        <sc-for list="{{taxas}}" as="t" hint-placeholder-count="4">
+          <div style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 12px; color: #5A6170;">{{t.rotulo}}</span>
+            <span style="font-size: 22px; font-weight: 700;">{{t.valor}} <span style="font-size: 13px; font-weight: 400; color: #5A6170;">{{t.abs}}</span></span>
+          </div>
+        </sc-for>
+      </section>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px;">
+
+        <section style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+          <h2 style="margin: 0; font-size: 15px;">Funil por etapa</h2>
+          <sc-for list="{{funil}}" as="e" hint-placeholder-count="8">
+            <div style="display: grid; grid-template-columns: 110px 1fr 56px; gap: 8px; align-items: center; font-size: 13px;">
+              <span>{{e.rotulo}}</span>
+              <div style="background: #EEF0F3; border-radius: 4px; height: 18px;"><div style="{{e.barra}}"></div></div>
+              <span style="text-align: right; font-weight: 600;">{{e.valor}}</span>
+            </div>
+          </sc-for>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+          <h2 style="margin: 0; font-size: 15px;">Leads por status ao longo do tempo (por dia)</h2>
+          <svg viewBox="0 0 400 170" role="img" aria-label="Rascunho de gráfico de linhas" style="width: 100%; height: 190px;">
+            <line x1="30" y1="150" x2="395" y2="150" stroke="#C4C9D2"></line>
+            <line x1="30" y1="10" x2="30" y2="150" stroke="#C4C9D2"></line>
+            <polyline fill="none" stroke="#1B2A7A" stroke-width="2.5" points="30,120 80,105 130,110 180,80 230,70 280,60 330,45 390,35"></polyline>
+            <polyline fill="none" stroke="#7D8594" stroke-width="2" stroke-dasharray="6 4" points="30,140 80,135 130,128 180,120 230,118 280,105 330,100 390,92"></polyline>
+            <polyline fill="none" stroke="#B5BBC6" stroke-width="2" points="30,148 80,146 130,144 180,140 230,139 280,134 330,132 390,128"></polyline>
+          </svg>
+          <div style="display: flex; gap: 16px; font-size: 12px; color: #5A6170; flex-wrap: wrap;">
+            <span>━ minerados</span><span>┅ contatados</span><span>─ responderam</span>
+          </div>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+          <h2 style="margin: 0; font-size: 15px;">Com anúncio × sem anúncio · taxa de resposta</h2>
+          <div style="display: grid; grid-template-columns: 110px 1fr 48px; gap: 8px; align-items: center; font-size: 13px;">
+            <span>Sem anúncio</span>
+            <div style="background: #EEF0F3; border-radius: 4px; height: 22px;"><div style="width: 41%; height: 22px; background: #1B2A7A; border-radius: 4px;"></div></div>
+            <strong>41%</strong>
+            <span>Com anúncio</span>
+            <div style="background: #EEF0F3; border-radius: 4px; height: 22px;"><div style="width: 22%; height: 22px; background: #7D8594; border-radius: 4px;"></div></div>
+            <strong>22%</strong>
+          </div>
+          <span style="font-size: 12px; color: #5A6170;">Barras lado a lado com a quantidade de cada grupo e a taxa de resposta</span>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+          <h2 style="margin: 0; font-size: 15px;">Faturamento estimado × informado</h2>
+          <span style="font-size: 12px; color: #5A6170;">Linhas: o que o sistema estimou · Colunas: o que o lead disse na conversa. Serve para ajustar a estimativa.</span>
+          <div style="overflow-x: auto;">
+            <table style="border-collapse: collapse; font-size: 12px; width: 100%; min-width: 360px;">
+              <thead><tr>
+                <th style="text-align: left; padding: 6px; border-bottom: 1px solid #D5D9E0;">Estimado ↓ / Informado →</th>
+                <th style="padding: 6px; border-bottom: 1px solid #D5D9E0;">até 30k</th><th style="padding: 6px; border-bottom: 1px solid #D5D9E0;">30–80k</th><th style="padding: 6px; border-bottom: 1px solid #D5D9E0;">80–200k</th><th style="padding: 6px; border-bottom: 1px solid #D5D9E0;">200–500k</th><th style="padding: 6px; border-bottom: 1px solid #D5D9E0;">+500k</th>
+              </tr></thead>
+              <tbody>
+                <sc-for list="{{cruzada}}" as="l" hint-placeholder-count="5">
+                  <tr><th style="text-align: left; padding: 6px; font-weight: 500;">{{l.rotulo}}</th>
+                    <sc-for list="{{l.cel}}" as="v" hint-placeholder-count="5"><td style="padding: 6px; text-align: center; border: 1px solid #EEF0F3;">{{v}}</td></sc-for>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+          <h2 style="margin: 0; font-size: 15px;">Leads por nicho e por cidade</h2>
+          <sc-for list="{{nichos}}" as="n" hint-placeholder-count="4">
+            <div style="display: grid; grid-template-columns: 130px 1fr; gap: 8px; align-items: center; font-size: 13px;">
+              <span>{{n.rotulo}}</span><div style="{{n.barra}}"></div>
+            </div>
+          </sc-for>
+          <span style="font-size: 12px; color: #5A6170;">Botão alterna entre nicho e cidade</span>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+          <h2 style="margin: 0; font-size: 15px;">Motivos de descarte</h2>
+          <sc-for list="{{motivos}}" as="n" hint-placeholder-count="6">
+            <div style="display: grid; grid-template-columns: 170px 1fr; gap: 8px; align-items: center; font-size: 13px;">
+              <span>{{n.rotulo}}</span><div style="{{n.barra}}"></div>
+            </div>
+          </sc-for>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+          <h2 style="margin: 0; font-size: 15px;">Falhas de envio por canal e número</h2>
+          <sc-for list="{{falhas}}" as="n" hint-placeholder-count="3">
+            <div style="display: grid; grid-template-columns: 190px 1fr; gap: 8px; align-items: center; font-size: 13px;">
+              <span>{{n.rotulo}}</span><div style="{{n.barra}}"></div>
+            </div>
+          </sc-for>
+          <span style="font-size: 12px; color: #5A6170;">Alerta quando a taxa de falha de um número sobe (risco de banimento)</span>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+          <h2 style="margin: 0; font-size: 15px;">Custo no período</h2>
+          <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+            <div style="display: flex; flex-direction: column;"><span style="font-size: 12px; color: #5A6170;">Total gasto em APIs</span><strong style="font-size: 24px;">R$ [valor]</strong></div>
+            <div style="display: flex; flex-direction: column;"><span style="font-size: 12px; color: #5A6170;">Custo por lead qualificado</span><strong style="font-size: 24px;">R$ [valor]</strong></div>
+          </div>
+        </section>
+      </div>
+
+      <section style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+        <h2 style="margin: 0; font-size: 15px;">Rodando agora</h2>
+        <sc-for list="{{fila}}" as="q" hint-placeholder-count="3">
+          <div style="display: grid; grid-template-columns: minmax(0, 260px) 1fr 80px; gap: 12px; align-items: center; font-size: 13px;">
+            <span><strong>{{q.etapa}}</strong> · {{q.nome}}</span>
+            <div style="background: #EEF0F3; border-radius: 4px; height: 10px;"><div style="{{q.barra}}"></div></div>
+            <span style="text-align: right;">{{q.valor}}</span>
+          </div>
+        </sc-for>
+      </section>
+
+      <section style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+        <h2 style="margin: 0; font-size: 15px;">Pesquisas recentes</h2>
+        <div style="overflow-x: auto;">
+          <table style="border-collapse: collapse; width: 100%; min-width: 760px; font-size: 13px;">
+            <thead><tr style="text-align: left; color: #5A6170;">
+              <th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Pesquisa</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Data</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Minerados</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Quentes</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Contatados</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Responderam</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Qualificados</th><th style="padding: 8px; border-bottom: 1px solid #D5D9E0; font-weight: 500;">Custo</th>
+            </tr></thead>
+            <tbody>
+              <sc-for list="{{pesquisas}}" as="p" hint-placeholder-count="3">
+                <tr>
+                  <td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{p.nome}}</td><td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{p.data}}</td><td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{p.a}}</td><td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{p.b}}</td><td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{p.c}}</td><td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{p.d}}</td><td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{p.e}}</td><td style="padding: 8px; border-bottom: 1px solid #EEF0F3;">{{p.f}}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1880}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const barra = (pct, cor) => 'width: ' + pct + '%; height: 18px; border-radius: 4px; background: ' + (cor || '#1B2A7A') + ';';
+    const fina = (pct) => 'width: ' + pct + '%; height: 10px; border-radius: 4px; background: #1B2A7A;';
+    return {
+      filtros: [
+        { rotulo: 'Período', valor: 'Este mês' }, { rotulo: 'Pesquisa', valor: 'Todas' },
+        { rotulo: 'Nicho', valor: 'Todos' }, { rotulo: 'Cidade/estado', valor: 'Todos' },
+        { rotulo: 'Usuário', valor: 'Todos' }, { rotulo: 'Canal', valor: 'Todos' }
+      ],
+      cartoes: [
+        { rotulo: 'Minerados', valor: '1.240' }, { rotulo: 'Enriquecidos', valor: '[nº]' },
+        { rotulo: 'Quentes', valor: '312' }, { rotulo: 'Mornos', valor: '[nº]' },
+        { rotulo: 'Frios', valor: '[nº]' }, { rotulo: 'Aprovados p/ contato', valor: '[nº]' },
+        { rotulo: 'Contatados', valor: '180' }, { rotulo: 'Responderam', valor: '61' },
+        { rotulo: 'Qualificados', valor: '22' }, { rotulo: 'Entregues', valor: '19' },
+        { rotulo: 'Descartados', valor: '[nº]' }
+      ],
+      taxas: [
+        { rotulo: 'Contatados ÷ minerados', valor: '14,5%', abs: '180 de 1.240' },
+        { rotulo: 'Responderam ÷ contatados', valor: '34%', abs: '61 de 180' },
+        { rotulo: 'Qualificados ÷ responderam', valor: '36%', abs: '22 de 61' },
+        { rotulo: 'Descartados ÷ minerados', valor: '[x]%', abs: '[nº] de 1.240' }
+      ],
+      funil: [
+        { rotulo: 'Minerados', valor: '1.240', barra: barra(100) },
+        { rotulo: 'Enriquecidos', valor: '[nº]', barra: barra(92) },
+        { rotulo: 'Pontuados', valor: '[nº]', barra: barra(88) },
+        { rotulo: 'Aprovados', valor: '[nº]', barra: barra(20) },
+        { rotulo: 'Contatados', valor: '180', barra: barra(14.5) },
+        { rotulo: 'Responderam', valor: '61', barra: barra(4.9) },
+        { rotulo: 'Qualificados', valor: '22', barra: barra(1.8) },
+        { rotulo: 'Entregues', valor: '19', barra: barra(1.5) }
+      ],
+      cruzada: ['até 30k', '30–80k', '80–200k', '200–500k', '+500k'].map((r) => ({ rotulo: r, cel: ['·', '·', '·', '·', '·'] })),
+      nichos: [
+        { rotulo: 'barbearia', barra: barra(80) }, { rotulo: 'clínica odonto', barra: barra(55) },
+        { rotulo: 'loja de celular', barra: barra(35) }, { rotulo: 'outros', barra: barra(20) }
+      ],
+      motivos: [
+        { rotulo: 'Fora do perfil', barra: barra(60, '#7D8594') }, { rotulo: 'Sem contato', barra: barra(45, '#7D8594') },
+        { rotulo: 'Duplicado', barra: barra(20, '#7D8594') }, { rotulo: 'Número inválido', barra: barra(15, '#7D8594') },
+        { rotulo: 'Pediu para não receber', barra: barra(8, '#7D8594') }, { rotulo: 'Outro', barra: barra(5, '#7D8594') }
+      ],
+      falhas: [
+        { rotulo: 'WhatsApp não oficial · nº 1', barra: barra(12, '#7D8594') },
+        { rotulo: 'WhatsApp não oficial · nº 2', barra: barra(30, '#7D8594') },
+        { rotulo: 'WhatsApp oficial', barra: barra(4, '#7D8594') }
+      ],
+      fila: [
+        { etapa: 'Mineração', nome: 'barbearia · Teresina', valor: '128 / 200', barra: fina(64) },
+        { etapa: 'Enriquecimento', nome: 'barbearia · Teresina', valor: '64 / 128', barra: fina(50) },
+        { etapa: 'Envio', nome: 'lote de 31 · WhatsApp nº 2', valor: '12 / 31', barra: fina(39) }
+      ],
+      pesquisas: [
+        { nome: 'barbearia · Teresina · 17/10', data: '17/10/2026', a: '128', b: '[nº]', c: '31', d: '[nº]', e: '[nº]', f: 'R$ [valor]' },
+        { nome: '[nicho] · [cidade] · [data]', data: '[data]', a: '[nº]', b: '[nº]', c: '[nº]', d: '[nº]', e: '[nº]', f: 'R$ [valor]' },
+        { nome: '[nicho] · [cidade] · [data]', data: '[data]', a: '[nº]', b: '[nº]', c: '[nº]', d: '[nº]', e: '[nº]', f: 'R$ [valor]' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

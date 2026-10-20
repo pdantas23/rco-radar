@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>RCO Radar · Escopo técnico (Fase 0)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 12mm 12mm 14mm; }
+  :root { --navy:#0F1A5C; --azul:#3B6FD8; --txt:#1A1D24; --sub:#4E5563; --linha:#DCE1EA; --fundo:#F3F6FB;
+          --verde:#1E7B4B; --verdeF:#E3F4EA; --laranja:#9A5B00; --laranjaF:#FDF0DC; --roxo:#3B3FA0; --roxoF:#E7E8F8; --vermelho:#B4232A; --vermelhoF:#FBE7E8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Poppins, system-ui, sans-serif; color: var(--txt); font-size: 9.6pt; line-height: 1.42; background: #fff; }
+  h2 { font-size: 13.5pt; margin: 14px 0 8px; padding-bottom: 5px; border-bottom: 2.5px solid var(--azul); display: flex; align-items: center; gap: 8px; color: var(--navy); }
+  h2 svg { width: 18px; height: 18px; flex: none; }
+  h3 { font-size: 10.5pt; margin: 0 0 4px; color: var(--navy); }
+  p { margin: 0 0 6px; }
+  ul { margin: 0; padding-left: 16px; } li { margin: 2px 0; }
+  .capa { background: var(--navy); color: #fff; border-radius: 12px; padding: 16px 20px; }
+  .capa .eyebrow { font-size: 7.5pt; letter-spacing: .18em; font-weight: 600; color: #A9C3FF; }
+  .capa h1 { margin: 2px 0 2px; font-size: 22pt; }
+  .capa .sub { color: #D5DDF5; font-size: 10pt; }
+  .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+  .meta div { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15); border-radius: 8px; padding: 7px 9px; font-size: 8.5pt; }
+  .meta b { display: block; font-size: 7pt; letter-spacing: .1em; color: #A9C3FF; font-weight: 600; }
+  .tag { display: inline-block; font-size: 6.8pt; font-weight: 700; letter-spacing: .06em; padding: 2px 7px; border-radius: 10px; white-space: nowrap; vertical-align: middle; }
+  .t-rec { background: var(--verdeF); color: var(--verde); }
+  .t-dec { background: var(--laranjaF); color: var(--laranja); }
+  .t-mud { background: var(--vermelhoF); color: var(--vermelho); }
+  .t-ok { background: var(--roxoF); color: var(--roxo); }
+  .caixa { background: var(--fundo); border-radius: 10px; padding: 10px 12px; }
+  .alerta { background: var(--laranjaF); border-radius: 10px; padding: 10px 12px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .num { display: flex; flex-direction: column; gap: 1px; background: var(--fundo); border-radius: 10px; padding: 10px 12px; }
+  .num b { font-size: 17pt; color: var(--navy); line-height: 1.1; }
+  .num span { font-size: 8.3pt; color: var(--sub); }
+  table { width: 100%; border-collapse: collapse; font-size: 8.7pt; }
+  th { background: var(--navy); color: #fff; text-align: left; font-weight: 500; padding: 6px 8px; }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--linha); vertical-align: top; }
+  tr:nth-child(even) td { background: #FAFBFD; }
+  .dir { text-align: right; white-space: nowrap; }
+  .tot td { font-weight: 700; background: var(--fundo) !important; }
+  .fluxo { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; align-items: stretch; }
+  .bloco { border: 1.5px solid var(--linha); border-radius: 10px; padding: 8px 10px; background: #fff; }
+  .bloco h3 { display: flex; gap: 6px; align-items: center; }
+  .bloco h3 svg { width: 15px; height: 15px; }
+  .bloco p { font-size: 8.4pt; color: var(--sub); margin: 0; }
+  .seta { text-align: center; color: var(--azul); font-weight: 700; font-size: 11pt; margin: 3px 0; }
+  .quebra { break-before: page; }
+  .tela { border: 1px solid var(--linha); border-radius: 8px; overflow: hidden; }
+  .tela img { width: 100%; display: block; }
+  .legenda { font-size: 8.3pt; color: var(--sub); margin-top: 4px; }
+  .evita { break-inside: avoid; }
+  .sprint { display: grid; grid-template-columns: 40px 1fr; gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--linha); font-size: 8.7pt; }
+  .sprint b { color: var(--navy); }
+  .fase { font-weight: 700; color: var(--navy); margin: 8px 0 2px; font-size: 9.5pt; }
+  .q { display: grid; grid-template-columns: 22px 1fr; gap: 6px; padding: 5px 0; border-bottom: 1px solid var(--linha); }
+  .q i { font-style: normal; font-weight: 700; color: var(--azul); }
+  .rod { font-size: 7.5pt; color: var(--sub); margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<!-- ───────── Página 1 ───────── -->
+<section class="capa">
+  <div class="eyebrow">RCO HUB · TIME DE DESENVOLVIMENTO</div>
+  <h1>RCO Radar</h1>
+  <div class="sub">Escopo técnico · resposta ao levantamento v1.0 de 17/10/2026</div>
+  <div class="meta">
+    <div><b>VERSÃO</b>1.0 · 20/10/2026</div>
+    <div><b>PARA</b>Luis · debate de 21/10</div>
+    <div><b>O QUE ESTE DOCUMENTO TRAZ</b>Como fazer, quanto custa, quanto tempo leva</div>
+    <div><b>LEGENDA</b><span class="tag t-rec">RECOMENDADO</span> <span class="tag t-dec">LUIS DECIDE</span> <span class="tag t-mud">MUDA O PEDIDO</span></div>
+  </div>
+</section>
+
+<h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 2"/></svg>Resumo em 1 minuto</h2>
+<div class="grid3" style="margin-bottom: 10px;">
+  <div class="num"><b>≈ R$ 0,08</b><span>por lead minerado e enriquecido<br>(R$ 65 a 85 a cada 1.000 leads)</span></div>
+  <div class="num"><b>≈ R$ 5 a 8</b><span>por lead qualificado, usando o funil do exemplo do levantamento</span></div>
+  <div class="num"><b>≈ 13 semanas</b><span>para as 3 fases, com 1 pessoa dedicada. Fase 1 entregue em cerca de 5 semanas</span></div>
+</div>
+<ul>
+  <li><b>Dá para fazer tudo o que o levantamento pede</b>, com 3 ajustes que vêm de regras das plataformas, não de escolha nossa (próxima seção).</li>
+  <li><b>O sistema roda na estrutura que a RCO já tem</b> (servidor e banco de dados). Não precisa contratar servidor novo.</li>
+  <li><b>O que mais pesa no custo é buscar e enriquecer os negócios</b>, não a IA. A conversa da IA sai por cerca de R$ 0,02 por lead.</li>
+  <li><b>Já começamos:</b> o banco de dados está desenhado e as regras mais delicadas (pontuação, casamento com CNPJ, trava antes de enviar) estão escritas e testadas.</li>
+</ul>
+
+<h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>3 coisas que mudam o que foi pedido</h2>
+<table>
+  <tr><th style="width: 27%;">O que descobrimos</th><th>O que significa na prática</th><th style="width: 30%;">Nossa proposta</th></tr>
+  <tr>
+    <td><span class="tag t-mud">MUDA O PEDIDO</span><br><b>O Instagram não deixa uma empresa mandar a primeira mensagem</b> pelo caminho oficial.</td>
+    <td>Pelo caminho oficial, a conta só pode responder quem escreveu antes. Mandar DM fria exige automação não oficial, que derruba conta com facilidade, como o próprio levantamento já alertou.</td>
+    <td><span class="tag t-dec">LUIS DECIDE</span><br>Tirar a DM fria da v1. O Instagram serve para <b>pesquisar</b> o lead e para <b>responder</b> quem chamar. O primeiro contato fica no WhatsApp.</td>
+  </tr>
+  <tr>
+    <td><span class="tag t-mud">MUDA O PEDIDO</span><br><b>O WhatsApp oficial cobra R$ 0,32 por mensagem de prospecção</b> e só aceita texto aprovado pela Meta.</td>
+    <td>A primeira mensagem fica "engessada" e custa mais que a conversa inteira da IA. O não oficial é grátis por mensagem, mas o número pode ser banido.</td>
+    <td><span class="tag t-rec">RECOMENDADO</span><br>Começar pelo <b>não oficial</b>, com números próprios do Radar, limites baixos e rodízio. Oficial como segunda opção.</td>
+  </tr>
+  <tr>
+    <td><span class="tag t-mud">MUDA O PEDIDO</span><br><b>A Meta não mostra anúncios brasileiros pela via oficial</b>. O Google proíbe guardar a lista de negócios.</td>
+    <td>"Tem anúncio ativo" só sai por coleta da página pública, como o levantamento previu. Pelo Google oficial, não podemos montar nossa base de leads.</td>
+    <td><span class="tag t-rec">RECOMENDADO</span><br>Usar <b>provedores de coleta</b> nas duas fontes, com troca rápida de provedor se um parar.</td>
+  </tr>
+</table>
+
+<div class="alerta" style="margin-top: 10px;">
+  <b>Importante para não afetar os clientes:</b> os números de WhatsApp do Radar devem ficar num serviço de WhatsApp <b>separado</b> do usado pelo CRM dos clientes. Em 28 e 29/09, um erro em uma conta derrubou todas as outras. Prospecção em volume aumenta esse risco, e ele não pode atingir quem paga.
+</div>
+
+<!-- ───────── Página 2 ───────── -->
+<h2 class="quebra"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M17.5 14v7M14 17.5h7"/></svg>Como o sistema funciona por dentro</h2>
+<p>A tela nunca fica "carregando" esperando uma busca. O usuário pede, o pedido entra numa fila e robôs trabalham em segundo plano. Dá para fechar a tela e voltar depois.</p>
+<div class="fluxo evita">
+  <div class="bloco"><h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Tela</h3><p>No computador e no celular. Pesquisa, lista, ficha e dashboard. Mesmo login do sistema comercial.</p></div>
+  <div class="bloco"><h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>Banco de dados da RCO</h3><p>O mesmo que já usamos. O Radar fica numa área própria, sem misturar com o comercial.</p></div>
+  <div class="bloco"><h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Fila de tarefas</h3><p>Cada busca, verificação e envio vira uma tarefa. Se uma falhar, o sistema tenta de novo sozinho, sem travar o lead.</p></div>
+</div>
+<div class="seta">↓ robôs pegam as tarefas da fila ↓</div>
+<div class="fluxo evita">
+  <div class="bloco"><h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Buscar e enriquecer</h3><p>Google Maps, CNPJ, site, Instagram, anúncios da Meta. Cada fonte é uma "peça" trocável.</p></div>
+  <div class="bloco"><h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Contatar e conversar</h3><p>WhatsApp (números próprios do Radar) e IA. Nada sai sem o clique de confirmação de uma pessoa.</p></div>
+  <div class="bloco"><h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>Entregar ao comercial</h3><p>Lead qualificado sai para o Frankenstein com a conversa completa. Na v1, por envio automático (webhook) ou planilha.</p></div>
+</div>
+<p class="legenda" style="margin-top: 8px;">Como o Radar fica no mesmo banco do sistema comercial, ligar os dois depois fica bem mais simples, seja qual for o formato escolhido.</p>
+
+<h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>De onde vêm os dados e quanto custa</h2>
+<p>Custo para cada <b>1.000 leads</b>, com dólar a R$ 5,04 (19/10/2026). Preços pesquisados nos sites dos fornecedores em 19/10.</p>
+<table>
+  <tr><th style="width: 18%;">Dado</th><th>Fonte escolhida</th><th class="dir" style="width: 15%;">por 1.000 leads</th><th style="width: 30%;">Observação</th></tr>
+  <tr><td><b>Negócios do Maps</b> (nome, telefone, nota, 5 avaliações)</td><td>Provedor de coleta (Apify). Reserva: Google oficial</td><td class="dir">R$ 26 a 40</td><td>O Google oficial sai parecido (R$ 20 a 30), mas proíbe guardar a lista. Escolher o provedor de coleta.</td></tr>
+  <tr><td><b>CNPJ</b> (porte, sócios, abertura)</td><td>Casa dos Dados (busca por nome + cidade)</td><td class="dir">≈ R$ 10</td><td>Preço a confirmar na contratação. Alternativa grátis: base própria da Receita, que dá mais trabalho para montar.</td></tr>
+  <tr><td><b>Instagram</b> (seguidores, posts, bio)</td><td>Provedor de coleta (Apify)</td><td class="dir">R$ 8 a 13</td><td>Pode ser bloqueado. Nesse caso o campo fica "não verificado" e o lead segue.</td></tr>
+  <tr><td><b>Site</b> (pixel, WhatsApp, plataforma)</td><td>Nosso próprio robô</td><td class="dir">R$ 0</td><td>Já está pronto e testado.</td></tr>
+  <tr><td><b>Anúncios ativos</b> (Meta)</td><td>Provedor de coleta (Apify)</td><td class="dir">≈ R$ 19</td><td>Só verifica quando alguém pede ou antes de um disparo, nunca todo dia.</td></tr>
+  <tr class="tot"><td colspan="2">Total para minerar e enriquecer 1.000 leads</td><td class="dir">R$ 65 a 85</td><td>Menos que isso na prática: só lead que passa no filtro inicial é enriquecido.</td></tr>
+</table>
+
+<h2 class="quebra"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Custo por lead qualificado</h2>
+<p>Conta feita com o funil do exemplo do levantamento: 1.240 minerados → 180 contatados → 61 responderam → 22 qualificados.</p>
+<div class="grid2">
+  <table>
+    <tr><th>Com WhatsApp não oficial</th><th class="dir">R$</th></tr>
+    <tr><td>Minerar e enriquecer 1.240 leads</td><td class="dir">≈ 105</td></tr>
+    <tr><td>180 primeiras mensagens</td><td class="dir">0</td></tr>
+    <tr><td>61 conversas com IA (Claude Haiku)</td><td class="dir">≈ 2</td></tr>
+    <tr class="tot"><td>Por lead qualificado (÷ 22)</td><td class="dir">≈ 5</td></tr>
+  </table>
+  <table>
+    <tr><th>Com WhatsApp oficial</th><th class="dir">R$</th></tr>
+    <tr><td>Minerar e enriquecer 1.240 leads</td><td class="dir">≈ 105</td></tr>
+    <tr><td>180 primeiras mensagens × R$ 0,32</td><td class="dir">≈ 58</td></tr>
+    <tr><td>61 conversas com IA (Claude Haiku)</td><td class="dir">≈ 2</td></tr>
+    <tr class="tot"><td>Por lead qualificado (÷ 22)</td><td class="dir">≈ 7,50</td></tr>
+  </table>
+</div>
+<ul style="margin-top: 8px;">
+  <li><b>IA:</b> recomendamos o Claude Haiku (≈ R$ 0,02 por conversa de 10 mensagens). Se a qualidade pedir um modelo mais forte (Claude Sonnet), a conversa sobe para R$ 0,20 a 0,40, cerca de R$ 1 a mais por qualificado. Áudio do lead é transcrito por ≈ R$ 0,03 por minuto.</li>
+  <li><b>Referência de orçamento:</b> 5.000 leads por mês custam ≈ R$ 350 a 450 em dados. Alguns provedores podem cobrar mensalidade mínima: confirmar na contratação.</li>
+</ul>
+
+<!-- ───────── Página 5 ───────── -->
+<h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Prazo por fase e sprints de 1 semana</h2>
+<p>Estimativa com 1 pessoa dedicada. As datas entram no ClickUp depois deste debate.</p>
+<div class="grid3">
+  <div>
+    <div class="fase">Fase 1 · Minerar e enriquecer · ≈ 5 semanas</div>
+    <div class="sprint"><b>S1</b><span>Base: banco, login, tela de pesquisa, fila <span class="tag t-ok">ADIANTADO</span></span></div>
+    <div class="sprint"><b>S2</b><span>Busca no Maps, dividindo a cidade em áreas para passar de 60 resultados</span></div>
+    <div class="sprint"><b>S3</b><span>CNPJ e faturamento estimado</span></div>
+    <div class="sprint"><b>S4</b><span>Site, Instagram e anúncios</span></div>
+    <div class="sprint"><b>S5</b><span>Ficha (só leitura) e exportar CSV · <b>entrega</b></span></div>
+  </div>
+  <div>
+    <div class="fase">Fase 2 · Pontuar, revisar, medir · ≈ 3 semanas</div>
+    <div class="sprint"><b>S6</b><span>Pontuação e tela de pesos por nicho</span></div>
+    <div class="sprint"><b>S7</b><span>Lista com filtros, ficha completa, CSV de remarketing</span></div>
+    <div class="sprint"><b>S8</b><span>Dashboard · <b>entrega</b></span></div>
+  </div>
+  <div>
+    <div class="fase">Fase 3 · Contato por IA · ≈ 5 semanas</div>
+    <div class="sprint"><b>S9</b><span>Números de envio, disparo com confirmação, fila</span></div>
+    <div class="sprint"><b>S10</b><span>IA conversando e coletando os campos</span></div>
+    <div class="sprint"><b>S11</b><span>Acompanhamentos, assumir conversa, SAIR, áudio</span></div>
+    <div class="sprint"><b>S12</b><span>Entrega ao comercial e testes reais</span></div>
+    <div class="sprint"><b>S13</b><span>Ajustes · <b>entrega</b></span></div>
+  </div>
+</div>
+
+<h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Riscos e como tratamos cada um</h2>
+<table>
+  <tr><th style="width: 26%;">Risco</th><th>Como tratamos</th></tr>
+  <tr><td>Fonte do Maps parar ou mudar</td><td>Cada fonte é uma peça trocável. Se o provedor de coleta cair, passamos para o Google oficial ou outro provedor sem refazer o sistema.</td></tr>
+  <tr><td>Casar o negócio com o CNPJ errado</td><td>Nota de confiança visível na ficha ("95%: nome e endereço iguais"). Abaixo de 50%, não assume. Empate vai para revisão humana. Esperamos acertar entre 40% e 60% dos negócios, porque muitos são MEI ou não usam o nome no CNPJ.</td></tr>
+  <tr><td>Anúncios só por coleta da página pública</td><td>Verifica só quando pedido ou antes de disparar. Se não achar a página, fica "não verificado" e o lead não ganha pontos por isso.</td></tr>
+  <tr><td>Instagram bloquear a coleta</td><td>Limite por hora. Se bloquear, o campo fica "não verificado" e o lead segue. A pessoa pode corrigir o @ na ficha.</td></tr>
+  <tr><td>Número de WhatsApp banido</td><td>Números próprios do Radar, separados dos clientes. Rodízio, limites baixos de início (20 por hora, 60 por dia), aquecimento de número novo, envio só das 8h às 20h e alerta quando as falhas sobem.</td></tr>
+  <tr><td>WhatsApp oficial exige texto aprovado</td><td>As 3 abordagens viram modelos para a Meta aprovar, o que costuma levar de horas a poucos dias. Só depois o canal oficial libera.</td></tr>
+  <tr><td>LGPD e reclamação de lead</td><td>Toda primeira mensagem tem "se não quiser receber, responda SAIR". Quem pede para sair entra numa lista de bloqueio respeitada em envio e exportação. Isso é garantido pelo sistema, não depende da IA.</td></tr>
+  <tr><td>Custo da IA</td><td>Claude Haiku ≈ R$ 0,02 por conversa. Não é o que pesa no orçamento.</td></tr>
+</table>
+
+<h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg>O que precisamos que o Luis decida</h2>
+<div class="grid2 evita">
+  <div>
+    <div class="q"><i>1</i><span><b>DM fria no Instagram sai da v1?</b> Recomendamos que sim. O primeiro contato fica no WhatsApp.</span></div>
+    <div class="q"><i>2</i><span><b>Começar pelo WhatsApp não oficial?</b> Recomendamos que sim, com números novos só do Radar. Quantos números?</span></div>
+    <div class="q"><i>3</i><span><b>Orçamento mensal</b> de dados e IA. Referência: R$ 350 a 450 por 5.000 leads.</span></div>
+    <div class="q"><i>4</i><span><b>Limite de gasto diário por usuário.</b> Sugestão: R$ 50.</span></div>
+    <div class="q"><i>5</i><span><b>Login:</b> usar o mesmo do sistema comercial? Recomendamos que sim.</span></div>
+  </div>
+  <div>
+    <div class="q"><i>6</i><span><b>Por quanto tempo guardar</b> lead que nunca foi contatado? Sugestão: 12 meses, depois apagar os dados de contato.</span></div>
+    <div class="q"><i>7</i><span><b>Textos das 3 abordagens e da conversa da IA:</b> escrevemos juntos depois do fluxo aprovado, como diz o levantamento. Quando?</span></div>
+    <div class="q"><i>8</i><span><b>Pesos iniciais da nota:</b> manter os do exemplo (sem anúncio +25, WhatsApp +15…)?</span></div>
+    <div class="q"><i>9</i><span><b>Formato da ligação com o Frankenstein</b> e <b>nome definitivo</b>: podem esperar. Não travam a Fase 1.</span></div>
+  </div>
+</div>
+
+<p class="rod">Preços consultados nos sites dos fornecedores em 19/10/2026 e sujeitos a mudança. "A confirmar" indica valor que só se fecha na contratação.</p>
+<!-- ───────── Página 3 e 4: telas ───────── -->
+<h2 class="quebra"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Anexo · as 4 telas (rascunho, sem visual final)</h2>
+<div class="grid2">
+  <div class="evita"><div class="tela"><img src="telas/Main.png" alt="Rascunho do dashboard"></div><p class="legenda"><b>1 · Dashboard.</b> Os números da prospecção, as taxas, o funil e os gráficos pedidos. Cada número explica o que conta ao passar o mouse.</p></div>
+  <div class="evita"><div class="tela"><img src="telas/Pesquisa.png" alt="Rascunho da tela de pesquisa"></div><p class="legenda"><b>2 · Pesquisa.</b> Nicho, lugar e filtros. O custo aparece antes de rodar, com aviso se a mesma pesquisa foi feita nos últimos 30 dias.</p></div>
+</div>
+<div class="grid2 quebra">
+  <div class="evita"><div class="tela"><img src="telas/Lista.png" alt="Rascunho da lista de leads"></div><p class="legenda"><b>3 · Lista de leads.</b> Filtros, seleção em lote e o painel de disparo. Nada sai sem o "Confirmar envio".</p></div>
+  <div class="evita"><div class="tela"><img src="telas/Ficha.png" alt="Rascunho da ficha do lead"></div><p class="legenda"><b>4 · Ficha do lead.</b> Tudo sobre o negócio, com fonte e data, a conta da nota, a conversa da IA e o que ela coletou.</p></div>
+</div>
+
+
+</body>
+</html>

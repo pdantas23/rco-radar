@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Ficha do lead</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F4F5F7}
+a{color:#1B2A7A}a:hover{color:#0E1650}
+summary{cursor:pointer}
+</style>
+</helmet>
+<div style="font-family: Inter, system-ui, sans-serif; color: #1A1D24; background: #F4F5F7; min-height: 100%;">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 24px; background: #FFFFFF; border-bottom: 1px solid #D5D9E0; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="width: 28px; height: 28px; border-radius: 50%; border: 2px solid #1B2A7A;"></div>
+      <strong style="font-size: 17px;">RCO Radar</strong>
+    </div>
+    <a href="Lista.dc.html" style="font-size: 13px;">← Voltar para a lista</a>
+  </header>
+
+  <section aria-label="Resumo" style="background: #FFFFFF; border-bottom: 1px solid #D5D9E0; padding: 16px 24px; display: flex; flex-direction: column; gap: 12px;">
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: flex-start;">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <h1 style="margin: 0; font-size: 24px;">Barbearia do Zé</h1>
+        <span style="font-size: 13px; color: #5A6170;">Teresina-PI · barbearia · status: <strong style="color: #1A1D24;">qualificado</strong></span>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+        <button type="button" disabled style="font: inherit; font-size: 13px; padding: 8px 14px; min-height: 40px; border: 1px solid #D5D9E0; border-radius: 8px; background: #F4F5F7; color: #7D8594;">Aprovar para contato</button>
+        <button type="button" style="font: inherit; font-size: 13px; padding: 8px 14px; min-height: 40px; border: 1px solid #C4C9D2; border-radius: 8px; background: #FFFFFF;">Descartar…</button>
+        <button type="button" style="font: inherit; font-size: 13px; padding: 8px 14px; min-height: 40px; border: 1px solid #C4C9D2; border-radius: 8px; background: #FFFFFF;">Verificar anúncios</button>
+        <button type="button" style="font: inherit; font-size: 13px; padding: 8px 14px; min-height: 40px; border: 1px solid #C4C9D2; border-radius: 8px; background: #FFFFFF;">Recoletar</button>
+        <button type="button" style="font: inherit; font-size: 13px; font-weight: 600; padding: 8px 14px; min-height: 40px; border: none; border-radius: 8px; background: #1B2A7A; color: #FFFFFF;">Enviar ao comercial</button>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px;">
+      <sc-for list="{{resumo}}" as="r" hint-placeholder-count="6">
+        <div style="background: #F4F5F7; border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px;">
+          <span style="font-size: 11px; color: #5A6170;">{{r.rotulo}}</span>
+          <strong style="font-size: 14px;">{{r.valor}}</strong>
+        </div>
+      </sc-for>
+    </div>
+    <span role="status" style="font-size: 12px; background: #FFF6E5; border: 1px solid #E0B65A; border-radius: 6px; padding: 6px 10px; align-self: flex-start;">Ana editou esta ficha há 3 min (corrigiu o @ do Instagram)</span>
+  </section>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 16px; padding: 20px 24px 40px; align-items: flex-start;">
+
+    <div style="flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 12px;">
+
+      <details open style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 14px 16px;">
+        <summary style="font-weight: 600; font-size: 15px;">Negócio <span style="font-weight: 400; font-size: 12px; color: #5A6170;">· Google Maps · 17/10/2026</span></summary>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 16px; margin-top: 12px; font-size: 13px;">
+          <span><span style="color: #5A6170;">Endereço</span><br>Rua A, 100 · Teresina-PI</span>
+          <span><span style="color: #5A6170;">Telefone</span><br>(86) 9xxxx-xxxx ✎</span>
+          <span><span style="color: #5A6170;">Nota</span><br>4,6 · 180 avaliações</span>
+          <span><span style="color: #5A6170;">Categoria</span><br>Barbearia</span>
+          <span><span style="color: #5A6170;">Horário</span><br>[horário da ficha]</span>
+          <span><span style="color: #5A6170;">Site</span><br>não tem</span>
+        </div>
+        <div style="margin-top: 14px; display: flex; flex-direction: column; gap: 8px;">
+          <span style="font-size: 13px; font-weight: 600;">5 avaliações mais recentes</span>
+          <sc-for list="{{avaliacoes}}" as="a" hint-placeholder-count="2">
+            <div style="font-size: 13px; background: #F4F5F7; border-radius: 6px; padding: 8px 10px;"><strong>{{a.nota}}</strong> · {{a.texto}}</div>
+          </sc-for>
+        </div>
+      </details>
+
+      <details open style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 14px 16px;">
+        <summary style="font-weight: 600; font-size: 15px;">Empresa (CNPJ) <span style="font-weight: 400; font-size: 12px; color: #5A6170;">· [fonte] · 17/10/2026</span></summary>
+        <p style="margin: 12px 0 10px; font-size: 13px; background: #E8EBF6; border-radius: 6px; padding: 8px 10px;">CNPJ casado com confiança 95%: nome fantasia e endereço iguais</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 16px; font-size: 13px;">
+          <span><span style="color: #5A6170;">Razão social</span><br>JOSE S SILVA ME</span>
+          <span><span style="color: #5A6170;">CNPJ</span><br>[CNPJ] ✎</span>
+          <span><span style="color: #5A6170;">Porte · regime</span><br>ME · Simples Nacional</span>
+          <span><span style="color: #5A6170;">Abertura · situação</span><br>2019 · ativa</span>
+          <span><span style="color: #5A6170;">Atividade (CNAE)</span><br>9602-5/01 cabeleireiros</span>
+          <span><span style="color: #5A6170;">Sócios</span><br>1 (só nome e cargo)</span>
+        </div>
+      </details>
+
+      <details open style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 14px 16px;">
+        <summary style="font-weight: 600; font-size: 15px;">Faturamento</summary>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 12px;">
+          <div style="border: 1px solid #D5D9E0; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 12px; color: #5A6170;">Estimado pelo sistema</span>
+            <strong style="font-size: 18px;">30 a 80 mil/mês</strong>
+            <span style="font-size: 12px; color: #5A6170;">Estimado a partir de: porte ME, 180 avaliações, 2 unidades</span>
+          </div>
+          <div style="border: 1px solid #D5D9E0; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 12px; color: #5A6170;">Informado pelo lead na conversa</span>
+            <strong style="font-size: 18px;">30 a 80 mil/mês</strong>
+            <span style="font-size: 12px; color: #5A6170;">Disse: "uns 40 mil por mês"</span>
+          </div>
+        </div>
+      </details>
+
+      <details open style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 14px 16px;">
+        <summary style="font-weight: 600; font-size: 15px;">Presença digital: Média <span style="font-weight: 400; font-size: 12px; color: #5A6170;">· Instagram · 17/10/2026</span></summary>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 16px; margin-top: 12px; font-size: 13px;">
+          <span><span style="color: #5A6170;">Instagram</span><br>@barbeariadoze ✎ <span style="color: #5A6170;">(corrigido por Ana)</span></span>
+          <span><span style="color: #5A6170;">Seguidores</span><br>2.300</span>
+          <span><span style="color: #5A6170;">Último post</span><br>há 4 dias · 9 posts em 30 dias</span>
+          <span><span style="color: #5A6170;">Bio</span><br>tem WhatsApp na bio</span>
+          <span><span style="color: #5A6170;">Site</span><br>não tem · sem pixel</span>
+        </div>
+      </details>
+
+      <details open style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 14px 16px;">
+        <summary style="font-weight: 600; font-size: 15px;">Anúncios</summary>
+        <div style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+          <strong style="font-size: 18px; padding: 8px 12px; border: 2px solid #1B2A7A; border-radius: 8px;">Sem anúncio ativo</strong>
+          <span style="font-size: 13px; color: #5A6170;">Biblioteca de Anúncios da Meta · verificado em 17/10</span>
+          <a href="#" style="font-size: 13px;">Ver na Biblioteca</a>
+        </div>
+      </details>
+
+      <details open style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 14px 16px;">
+        <summary style="font-weight: 600; font-size: 15px;">Pontuação: 95 · Quente <span style="font-weight: 400; font-size: 12px; color: #5A6170;">· regra geral v1</span></summary>
+        <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 6px;">
+          <sc-for list="{{criterios}}" as="c" hint-placeholder-count="8">
+            <div style="display: grid; grid-template-columns: 24px 1fr 48px; gap: 8px; font-size: 13px; align-items: center; padding: 4px 0; border-bottom: 1px solid #EEF0F3;">
+              <span aria-hidden="true">{{c.marca}}</span><span>{{c.nome}}</span><strong style="text-align: right;">{{c.pontos}}</strong>
+            </div>
+          </sc-for>
+        </div>
+      </details>
+
+      <details style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 14px 16px;">
+        <summary style="font-weight: 600; font-size: 15px;">Histórico</summary>
+        <ul style="margin: 12px 0 0; padding-left: 18px; font-size: 13px; display: flex; flex-direction: column; gap: 4px;">
+          <sc-for list="{{historico}}" as="h" hint-placeholder-count="5"><li>{{h}}</li></sc-for>
+        </ul>
+      </details>
+
+      <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600;">Observação
+        <textarea rows="3" style="font: inherit; font-weight: 400; padding: 10px 12px; border: 1px solid #C4C9D2; border-radius: 8px;">[observação livre do SDR]</textarea>
+      </label>
+    </div>
+
+    <aside style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 12px;">
+      <section style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;">
+        <h2 style="margin: 0; font-size: 15px;">Contato</h2>
+        <span style="font-size: 13px;">WhatsApp: (86) 9xxxx-xxxx · provável (celular)</span>
+        <span style="font-size: 13px;">Instagram: @barbeariadoze</span>
+      </section>
+
+      <section style="background: #FFFFFF; border: 1px solid #D5D9E0; border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <h2 style="margin: 0; font-size: 15px;">Conversa <span style="font-weight: 400; font-size: 12px; color: #5A6170;">· IA respondendo</span></h2>
+          <button type="button" style="font: inherit; font-size: 13px; font-weight: 600; padding: 6px 12px; min-height: 36px; border: 1px solid #1B2A7A; border-radius: 8px; background: #FFFFFF; color: #1B2A7A;">Assumir conversa</button>
+        </div>
+        <sc-for list="{{mensagens}}" as="m" hint-placeholder-count="6">
+          <div style="{{m.estilo}}">
+            <span style="font-size: 11px; color: #5A6170;">{{m.autor}}</span>
+            <span style="font-size: 13px;">{{m.texto}}</span>
+          </div>
+        </sc-for>
+      </section>
+
+      <section style="background: #FFFFFF; border: 2px solid #1B2A7A; border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;">
+        <h2 style="margin: 0 0 4px; font-size: 15px;">O que a IA coletou</h2>
+        <sc-for list="{{coletados}}" as="c" hint-placeholder-count="7">
+          <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px; font-size: 13px; padding: 4px 0; border-bottom: 1px solid #EEF0F3;">
+            <span style="color: #5A6170;">{{c.campo}}</span><span>{{c.valor}}</span>
+          </div>
+        </sc-for>
+      </section>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":2000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const ia = 'align-self: flex-start; max-width: 85%; background: #F4F5F7; border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px;';
+    const lead = 'align-self: flex-end; max-width: 85%; background: #E8EBF6; border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px;';
+    return {
+      resumo: [
+        { rotulo: 'Nota', valor: '95 · Quente' }, { rotulo: 'Faturamento estimado', valor: '30 a 80 mil' },
+        { rotulo: 'Anúncio', valor: 'Sem anúncio ativo' }, { rotulo: 'Presença digital', valor: 'Média' },
+        { rotulo: 'Canais', valor: 'WhatsApp · Instagram' }, { rotulo: 'Google', valor: '4,6 · 180 aval.' }
+      ],
+      avaliacoes: [
+        { nota: '[nota]', texto: '[texto da avaliação mais recente]' },
+        { nota: '[nota]', texto: '[texto da avaliação]' }
+      ],
+      criterios: [
+        { marca: '✓', nome: 'Sem anúncio ativo', pontos: '+25' },
+        { marca: '✓', nome: 'Presença digital Média ou Forte', pontos: '+15' },
+        { marca: '✓', nome: 'Tem WhatsApp', pontos: '+15' },
+        { marca: '✓', nome: 'Faturamento estimado 30 mil ou mais', pontos: '+15' },
+        { marca: '✓', nome: 'Nota 4,0 ou mais e 50 ou mais avaliações', pontos: '+15' },
+        { marca: '✓', nome: 'CNPJ ativo', pontos: '+10' },
+        { marca: '–', nome: 'Fechado ou CNPJ baixado (zera)', pontos: 'não' },
+        { marca: '–', nome: 'Sem nenhum canal de contato (zera)', pontos: 'não' }
+      ],
+      historico: [
+        '17/10 · Sistema · encontrado na pesquisa "barbearia · Teresina · 17/10"',
+        '17/10 · Sistema · enriquecido e pontuado (95, regra geral v1)',
+        '19/10 · Ana · corrigiu o @ do Instagram (recoletado)',
+        '19/10 · Ana · aprovou para contato · WhatsApp nº 2 · abordagem "sem anúncio"',
+        '19/10 · Sistema · contatado → respondeu → qualificado'
+      ],
+      mensagens: [
+        { autor: 'IA · WhatsApp · 10:02', estilo: ia, texto: 'Oi, falo com o responsável pela Barbearia do Zé? Vi que vocês têm nota 4,6 no Google e bastante gente comentando. Reparei que não estão anunciando no Instagram agora. Hoje a agenda enche só no boca a boca ou vocês fazem alguma divulgação? Se não quiser receber, responda SAIR.' },
+        { autor: 'Lead · 10:15', estilo: lead, texto: 'Sou o dono. Fim de semana enche, de terça a quinta fica vazio.' },
+        { autor: 'IA · 10:15', estilo: ia, texto: 'Entendi. E de faturamento, mais ou menos quanto entra por mês? Já tentou anúncio?' },
+        { autor: 'Lead · 10:21', estilo: lead, texto: 'Uns 40 mil. Já impulsionei post, não deu resultado.' },
+        { autor: 'IA · 10:21', estilo: ia, texto: 'Qual o melhor horário para falar com você? Posso passar seu contato para alguém do nosso time?' },
+        { autor: 'Lead · 10:30', estilo: lead, texto: 'Pode sim, depois das 14h.' }
+      ],
+      coletados: [
+        { campo: 'Decisor', valor: 'sim, é o dono' },
+        { campo: 'Faturamento', valor: '30 a 80 mil ("uns 40 mil")' },
+        { campo: 'Investe em anúncio', valor: 'não (já impulsionou, sem resultado)' },
+        { campo: 'Dor / objetivo', valor: '"de terça a quinta fica vazio"' },
+        { campo: 'Já teve agência', valor: '[não informado]' },
+        { campo: 'Melhor horário', valor: 'depois das 14h' },
+        { campo: 'Aceita o comercial', valor: 'sim' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

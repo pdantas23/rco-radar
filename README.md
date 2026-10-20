@@ -10,7 +10,7 @@ Levantamento: `docs/levantamento-v1.0.pdf` (17/10/2026).
 | `supabase/migrations/` | Schema `radar` na instância `supabase` (a mesma do COMERCIAL-RCO) | 001 escrita e validada em Postgres 15 local — **não aplicada** |
 | `workers/` | Python 3.11: fila, adaptadores de fontes, regras (pontuação, CNPJ, trava de envio) | esqueleto + regras puras testadas |
 | `web/` | Next.js 16 + React 19 + `@supabase/ssr` (mesma base do COMERCIAL-RCO) | aguarda wireframes aprovados |
-| `docs/` | Escopo técnico da Fase 0 | em escrita |
+| `docs/fase0/` | Escopo técnico da Fase 0 (PDF para o Luis) e rascunhos das 4 telas | entregue 20/10 |
 
 ## Arquitetura
 
