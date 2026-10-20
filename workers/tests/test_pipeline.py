@@ -322,3 +322,12 @@ def test_nao_finaliza_antes_do_instagram(conn):
     conn.execute("""insert into radar.jobs (agency_id, tipo, lead_id, status)
                     values (%s, 'enriquecer_instagram', %s, 'feito')""", (AGENCIA, lead_id))
     assert etapas.talvez_finalizar(conn, lead_id) is True
+
+
+async def test_config_de_uma_agencia_nao_vale_para_outra(conn):
+    conn.execute("""insert into radar.config (agency_id, chave, valor)
+                    values (%s, 'anuncios_ativos', '{"ligado": true}')""", (OUTRA_AGENCIA,))
+    criar_pesquisa(conn, AGENCIA, max_resultados=50)
+    await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé")]))
+    assert conn.execute("select anuncio_ativo from radar.leads").fetchone()[0] == "nao_verificado"
+    assert conn.execute("select count(*) from radar.jobs where tipo = 'verificar_anuncios'").fetchone()[0] == 0
