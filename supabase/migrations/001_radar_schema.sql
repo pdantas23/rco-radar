@@ -1,6 +1,6 @@
 -- RCO Radar — schema inicial (modelo de dados mínimo do levantamento v1.0, 17/10/2026)
 --
--- NÃO APLICADA. Destino: instância `supabase` (a mesma do COMERCIAL-RCO), schema
+-- JÁ APLICADA EM PRODUÇÃO (instância `supabase`, 2026-10-20 01:10:30 UTC, aprovada pelo Philip). Destino: instância `supabase` (a mesma do COMERCIAL-RCO), schema
 -- próprio `radar`, sem tocar em nenhuma tabela existente. Aplicar só com
 -- aprovação do Philip, via `docker exec -i supabase_supabase-db-1 psql -U supabase_admin`.
 --
