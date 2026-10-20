@@ -20,9 +20,10 @@ NOMINATIM = "https://nominatim.openstreetmap.org/search"
 
 def geocodificador(conn):
     """Cidade -> (lat, lng) pelo Nominatim, com cache permanente em radar.config (1 consulta por cidade)."""
-    async def geocodificar(cidade: str, uf: str):
+    async def geocodificar(cidade: str, uf: str, agency_id: str):
         chave = f"geo:{cidade.strip().lower()}|{uf.lower()}"
-        row = conn.execute("select valor from radar.config where chave = %s", (chave,)).fetchone()
+        row = conn.execute("select valor from radar.config where agency_id = %s and chave = %s",
+                           (agency_id, chave)).fetchone()
         if row:
             return row[0]["lat"], row[0]["lng"]
         async with httpx.AsyncClient(timeout=20, headers={"User-Agent": "RCO-Radar/0.1 (uso interno RCO Hub)"}) as c:
@@ -32,8 +33,9 @@ def geocodificador(conn):
         if not dados:
             return None
         lat, lng = float(dados[0]["lat"]), float(dados[0]["lon"])
-        conn.execute("""insert into radar.config (chave, valor) values (%s, %s::jsonb)
-                        on conflict (chave) do nothing""", (chave, f'{{"lat": {lat}, "lng": {lng}}}'))
+        conn.execute("""insert into radar.config (agency_id, chave, valor) values (%s, %s, %s::jsonb)
+                        on conflict (agency_id, chave) do nothing""",
+                     (agency_id, chave, f'{{"lat": {lat}, "lng": {lng}}}'))
         return lat, lng
     return geocodificar
 
@@ -60,6 +62,10 @@ async def processar_um(conn: psycopg.Connection, f: etapas.Fontes, nome: str,
         with conn.transaction():
             await etapas.HANDLERS[job.tipo](conn, job, f)
             fila.concluir(conn, job)
+    except etapas.RadarDesligado as e:
+        fila.cancelar(conn, job, str(e))
+        if job.tipo == "minerar" and job.pesquisa_id:
+            conn.execute("update radar.pesquisas set status = 'cancelada' where id = %s", (job.pesquisa_id,))
     except Exception as e:                      # noqa: BLE001 — qualquer falha vira retentativa
         log.warning("job %s (%s) falhou: %s", job.id, job.tipo, e)
         vai_tentar = fila.falhar(conn, job, f"{type(e).__name__}: {e}")

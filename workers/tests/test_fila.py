@@ -4,43 +4,30 @@ Precisa de RADAR_TEST_DSN apontando para um Postgres 15 descartável com o stub
 do Supabase (roles + auth.users) e a 001 aplicada. Sem a variável, pula.
 """
 
-import os
 import threading
 
 import psycopg
-import pytest
 
 from radar import fila
-
-DSN = os.environ.get("RADAR_TEST_DSN")
-pytestmark = pytest.mark.skipif(not DSN, reason="RADAR_TEST_DSN não definido")
-
-
-@pytest.fixture
-def conn():
-    c = psycopg.connect(DSN, autocommit=True)
-    c.execute("delete from radar.jobs")
-    yield c
-    c.execute("delete from radar.jobs")
-    c.close()
+from tests.conftest import AGENCIA, DSN
 
 
 def test_pega_conclui(conn):
-    jid = fila.enfileirar(conn, "pontuar", payload={"x": 1})
+    jid = fila.enfileirar(conn, "pontuar", agency_id=AGENCIA, payload={"x": 1})
     job = fila.pegar(conn, ["pontuar"], "w1")
-    assert job.id == jid and job.payload == {"x": 1} and job.tentativas == 1
+    assert job.id == jid and job.payload == {"x": 1} and job.tentativas == 1 and job.agency_id == AGENCIA
     assert fila.pegar(conn, ["pontuar"], "w2") is None      # já reservado
     fila.concluir(conn, job)
     assert conn.execute("select status from radar.jobs where id=%s", (jid,)).fetchone()[0] == "feito"
 
 
 def test_tipo_filtrado(conn):
-    fila.enfileirar(conn, "enviar")
+    fila.enfileirar(conn, "enviar", agency_id=AGENCIA)
     assert fila.pegar(conn, ["minerar"], "w1") is None
 
 
 def test_falha_reagenda_e_desiste(conn):
-    jid = fila.enfileirar(conn, "verificar_anuncios")
+    jid = fila.enfileirar(conn, "verificar_anuncios", agency_id=AGENCIA)
     for tentativa in (1, 2):
         job = fila.pegar(conn, ["verificar_anuncios"], "w1")
         assert fila.falhar(conn, job, f"bloqueado {tentativa}") is True
@@ -52,7 +39,7 @@ def test_falha_reagenda_e_desiste(conn):
 
 
 def test_worker_morto_devolve_job(conn):
-    jid = fila.enfileirar(conn, "minerar")
+    jid = fila.enfileirar(conn, "minerar", agency_id=AGENCIA)
     fila.pegar(conn, ["minerar"], "w-morto")
     conn.execute("update radar.jobs set travado_em = now() - interval '1 hour' where id=%s", (jid,))
     job = fila.pegar(conn, ["minerar"], "w-vivo")
@@ -62,7 +49,7 @@ def test_worker_morto_devolve_job(conn):
 def test_concorrencia_cada_job_uma_vez(conn):
     """8 workers em paralelo disputando 200 jobs: nenhum job pego duas vezes."""
     for _ in range(200):
-        fila.enfileirar(conn, "enriquecer_site")
+        fila.enfileirar(conn, "enriquecer_site", agency_id=AGENCIA)
     pegos: list[int] = []
     trava = threading.Lock()
 

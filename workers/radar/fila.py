@@ -20,6 +20,7 @@ BACKOFF_BASE = timedelta(minutes=1)
 class Job:
     id: int
     tipo: str
+    agency_id: str
     pesquisa_id: str | None
     lead_id: str | None
     payload: dict
@@ -27,12 +28,12 @@ class Job:
     max_tentativas: int
 
 
-def enfileirar(conn: psycopg.Connection, tipo: str, *, pesquisa_id=None, lead_id=None,
+def enfileirar(conn: psycopg.Connection, tipo: str, *, agency_id, pesquisa_id=None, lead_id=None,
                payload: dict | None = None, agendado_para=None) -> int:
     row = conn.execute(
-        """insert into radar.jobs (tipo, pesquisa_id, lead_id, payload, agendado_para)
-           values (%s, %s, %s, %s, coalesce(%s, now())) returning id""",
-        (tipo, pesquisa_id, lead_id, json.dumps(payload or {}), agendado_para),
+        """insert into radar.jobs (agency_id, tipo, pesquisa_id, lead_id, payload, agendado_para)
+           values (%s, %s, %s, %s, %s, coalesce(%s, now())) returning id""",
+        (agency_id, tipo, pesquisa_id, lead_id, json.dumps(payload or {}), agendado_para),
     ).fetchone()
     return row[0]
 
@@ -54,14 +55,20 @@ def pegar(conn: psycopg.Connection, tipos: list[str], worker: str,
                  order by agendado_para, id
                  for update skip locked
                  limit 1)
-               returning id, tipo, pesquisa_id, lead_id, payload, tentativas, max_tentativas""",
+               returning id, tipo, agency_id, pesquisa_id, lead_id, payload, tentativas, max_tentativas""",
             (worker, tipos),
         ).fetchone()
     if not row:
         return None
+    row["agency_id"] = str(row["agency_id"])
     row["pesquisa_id"] = str(row["pesquisa_id"]) if row["pesquisa_id"] else None
     row["lead_id"] = str(row["lead_id"]) if row["lead_id"] else None
     return Job(**row)
+
+
+def cancelar(conn: psycopg.Connection, job: Job, motivo: str) -> None:
+    conn.execute("update radar.jobs set status = 'cancelado', erro = %s, concluido_em = now() where id = %s",
+                 (motivo[:2000], job.id))
 
 
 def concluir(conn: psycopg.Connection, job: Job) -> None:

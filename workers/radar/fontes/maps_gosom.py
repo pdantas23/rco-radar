@@ -160,6 +160,10 @@ class FonteMapsComReserva(FonteMaps):
         self.chave = principal.chave
         self.limite_por_consulta = getattr(principal, "limite_por_consulta", 60)
         self.ultima_falha: str | None = None
+        self.permitir_reserva = True          # a etapa desliga quando a reserva paga não cabe no teto
+
+    def estimar(self, quantidade: int) -> float:
+        return self.principal.estimar(quantidade)       # a principal (gosom) é grátis
 
     async def buscar(self, consulta: ConsultaMaps, uf_padrao: str = "") -> list[NegocioMaps]:
         try:
@@ -169,7 +173,7 @@ class FonteMapsComReserva(FonteMaps):
             return r
         except Exception as e:                       # noqa: BLE001 — qualquer falha aciona a reserva
             self.ultima_falha = f"{type(e).__name__}: {e}"
-            if self.reserva is None:
+            if self.reserva is None or not self.permitir_reserva:
                 raise
         r = await self.reserva.buscar(consulta, uf_padrao=uf_padrao)
         self.chave, self.custo_ultima_chamada = self.reserva.chave, self.reserva.custo_ultima_chamada
