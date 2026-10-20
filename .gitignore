@@ -8,3 +8,8 @@ __pycache__/
 node_modules/
 .next/
 .DS_Store
+
+# protótipo antigo das telas (migrado para o COMERCIAL); só o ambiente de teste entra
+web/*
+!web/dev/
+docs/prints-web/
