@@ -46,6 +46,20 @@ def test_converte_linha_do_csv():
     assert converter(linha(place_id="")) is None
 
 
+def test_csv_real_do_teste_na_vps():
+    """CSV de verdade do gosom (busca 'barbearia', Teresina, 20/10/2026, docs/gosom-teste/d2.csv)."""
+    import pathlib
+    arq = pathlib.Path(__file__).parents[2] / "docs" / "gosom-teste" / "d2.csv"
+    ns = [converter(l, "PI") for l in csv.DictReader(arq.open(encoding="utf-8"))]
+    assert len(ns) == 20 and all(ns)
+    assert all(n.estado == "PI" and n.cidade == "Teresina" and n.place_id for n in ns)
+    for n in ns:
+        assert len(n.avaliacoes) <= 5
+        datas = [a.data for a in n.avaliacoes]
+        assert all(datas) and datas == sorted(datas, reverse=True)          # as mais recentes primeiro
+        assert all("Name" not in r and "ProfilePicture" not in r for r in n.bruto.get("user_reviews") or [])
+
+
 def test_zoom():
     assert zoom_para_raio(1) == 16 and zoom_para_raio(4) == 14 and zoom_para_raio(100) == 10
 

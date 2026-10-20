@@ -1,0 +1,6 @@
+t=0 st=pending load=4.12 2.03 1.83 cpu=25.10% mem=52.79MiB / 1.5GiB
+t=9 st=working load=3.79 2.00 1.82 cpu=104.29% mem=327.1MiB / 1.5GiB
+t=18 st=working load=4.05 2.11 1.86 cpu=114.10% mem=548.6MiB / 1.5GiB
+t=27 st=working load=4.60 2.29 1.92 cpu=108.84% mem=733.9MiB / 1.5GiB
+t=36 st=working load=4.44 2.33 1.93 cpu=96.73% mem=909.8MiB / 1.5GiB
+t=45 st=ok load=4.65 2.45 1.98 cpu=0.12% mem=37.77MiB / 1.5GiB

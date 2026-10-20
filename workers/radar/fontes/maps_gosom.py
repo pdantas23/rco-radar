@@ -16,6 +16,7 @@ import json
 import math
 import os
 import re
+from datetime import datetime
 
 import httpx
 
@@ -43,6 +44,13 @@ def _json(celula: str):
         return None
 
 
+def _data(v):
+    try:
+        return datetime.fromisoformat(str(v).replace("Z", "+00:00")) if v else None
+    except ValueError:
+        return None
+
+
 def _num(v, tipo=float):
     try:
         return tipo(v) if v not in (None, "", "null") else None
@@ -58,11 +66,12 @@ def converter(linha: dict, uf_padrao: str = "") -> NegocioMaps | None:
         return None
     end = _json(linha.get("complete_address")) or {}
     avaliacoes = []
-    for r in (_json(linha.get("user_reviews")) or [])[:5]:
+    revs = sorted(_json(linha.get("user_reviews")) or [], key=lambda r: r.get("published_at") or "", reverse=True)
+    for r in revs:
         texto = (r.get("Description") or "").strip()
-        if texto:
-            # "When" é relativo ("há 2 semanas"): fica no dado bruto, sem data exata
-            avaliacoes.append(Avaliacao(autor="", nota=int(r.get("Rating") or 0), texto=texto, data=None))
+        if texto and len(avaliacoes) < 5:
+            avaliacoes.append(Avaliacao(autor="", nota=int(r.get("Rating") or 0), texto=texto,
+                                        data=_data(r.get("published_at"))))
     bruto = {k: (_json(v) if isinstance(v, str) and v[:1] in "[{" else v) for k, v in linha.items()}
     for r in bruto.get("user_reviews") or []:
         r.pop("Name", None)
