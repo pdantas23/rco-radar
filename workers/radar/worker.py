@@ -47,9 +47,13 @@ def fontes_reais(conn) -> etapas.Fontes:
     from radar.fontes.maps_apify import MapsApify
     from radar.fontes.maps_gosom import FonteMapsComReserva, MapsGosom
     # Maps: gosom no nosso servidor (grátis); Apify assume se o gosom falhar
-    reserva = MapsApify() if os.environ.get("APIFY_TOKEN") else None
-    maps = FonteMapsComReserva(MapsGosom(), reserva)
-    return etapas.Fontes(maps, CnpjCasaDosDados(), InstagramApify(), AnunciosApify(), geocodificador(conn))
+    apify = MapsApify() if os.environ.get("APIFY_TOKEN") else None
+    proprio = FonteMapsComReserva(MapsGosom(), apify)        # Apify só entra se o gosom falhar e couber no teto
+    mapas = {"gosom_maps": proprio}
+    if apify:
+        mapas["apify_maps"] = apify                          # o usuário escolheu a API (paga)
+    return etapas.Fontes(proprio, CnpjCasaDosDados(), InstagramApify(), AnunciosApify(), geocodificador(conn),
+                         mapas=mapas)
 
 
 async def processar_um(conn: psycopg.Connection, f: etapas.Fontes, nome: str,

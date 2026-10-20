@@ -43,10 +43,15 @@ class RadarDesligado(Exception):
 class Fontes:
     """Os adaptadores em uso. Trocar uma fonte = passar outro objeto aqui."""
 
-    def __init__(self, maps, cnpj, instagram, anuncios, geocodificar, site=verificar_site):
+    def __init__(self, maps, cnpj, instagram, anuncios, geocodificar, site=verificar_site, mapas=None):
         self.maps, self.cnpj, self.instagram, self.anuncios = maps, cnpj, instagram, anuncios
         self.geocodificar = geocodificar          # async (cidade, uf, agency_id) -> (lat, lng) | None
         self.site = site
+        # plataforma escolhida na pesquisa (radar.pesquisas.fonte_maps): 'gosom_maps' | 'apify_maps'
+        self.mapas = mapas or {}
+
+    def maps_da_pesquisa(self, chave: str | None):
+        return self.mapas.get(chave or "", self.maps)
 
 
 def _cur(conn):
@@ -115,25 +120,26 @@ async def minerar(conn: psycopg.Connection, job: fila.Job, f: Fontes) -> None:
         if not ponto:
             raise RuntimeError(f"não achei a cidade {p['lugar_cidade']}-{p['lugar_estado']}")
         lat, lng = ponto
-    limite = getattr(f.maps, "limite_por_consulta", geo.LIMITE_POR_CONSULTA)
+    maps = f.maps_da_pesquisa(p["fonte_maps"])
+    limite = getattr(maps, "limite_por_consulta", geo.LIMITE_POR_CONSULTA)
     celulas = geo.grade(lat, lng, raio, maximo, limite_por_consulta=limite)
     por_celula = min(limite * 2, math.ceil(maximo * 1.3 / len(celulas)))
     termo = p["nicho_texto"] + (f" {p['categoria_maps']}" if p["categoria_maps"] else "")
 
     vistos, aceitos = set(), []
     for cel in celulas:
-        previsto = f.maps.estimar(por_celula) if hasattr(f.maps, "estimar") else 0.0
-        if hasattr(f.maps, "reserva"):
+        previsto = maps.estimar(por_celula) if hasattr(maps, "estimar") else 0.0
+        if hasattr(maps, "reserva"):
             # principal grátis sempre roda; a reserva paga só entra se couber no teto
-            reserva = getattr(f.maps.reserva, "estimar", lambda n: 0.0)(por_celula)
-            f.maps.permitir_reserva = pode_gastar(conn, ag, reserva)
+            reserva = getattr(maps.reserva, "estimar", lambda n: 0.0)(por_celula)
+            maps.permitir_reserva = pode_gastar(conn, ag, reserva)
         elif previsto and not pode_gastar(conn, ag, previsto):
             log.info("minerar %s: teto da agência atingido, parando a busca", p["id"])
             break
-        negocios = await f.maps.buscar(ConsultaMaps(termo, cel.lat, cel.lng, cel.raio_km,
+        negocios = await maps.buscar(ConsultaMaps(termo, cel.lat, cel.lng, cel.raio_km,
                                                     p["categoria_maps"], por_celula),
                                        uf_padrao=p["lugar_estado"])
-        custo(conn, ag, f.maps.chave, "buscar", f.maps.custo_ultima_chamada, len(negocios), pesquisa_id=p["id"])
+        custo(conn, ag, maps.chave, "buscar", maps.custo_ultima_chamada, len(negocios), pesquisa_id=p["id"])
         for n in negocios:
             if n.place_id in vistos:
                 continue
@@ -151,7 +157,7 @@ async def minerar(conn: psycopg.Connection, job: fila.Job, f: Fontes) -> None:
 
     novos = 0
     for n in aceitos[:maximo]:
-        lead_id, novo = _gravar_lead(conn, ag, n, f.maps.chave)
+        lead_id, novo = _gravar_lead(conn, ag, n, maps.chave)
         conn.execute("""insert into radar.pesquisas_leads (agency_id, pesquisa_id, lead_id) values (%s, %s, %s)
                         on conflict do nothing""", (ag, p["id"], lead_id))
         if novo:

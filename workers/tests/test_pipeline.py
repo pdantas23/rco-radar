@@ -331,3 +331,19 @@ async def test_config_de_uma_agencia_nao_vale_para_outra(conn):
     await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé")]))
     assert conn.execute("select anuncio_ativo from radar.leads").fetchone()[0] == "nao_verificado"
     assert conn.execute("select count(*) from radar.jobs where tipo = 'verificar_anuncios'").fetchone()[0] == 0
+
+
+
+async def test_plataforma_escolhida_na_pesquisa(conn):
+    """fonte_maps da pesquisa decide a fonte: 'apify_maps' = API paga, 'gosom_maps' = servidor próprio."""
+    proprio = FakeMaps([negocio("p1", "Barbearia do Zé")])
+    api = FakeMapsPago([negocio("p2", "Barbearia API")])
+    f = etapas.Fontes(proprio, FakeCnpj(), FakeInstagram(), FakeAnuncios(), geo, site_sem_site,
+                      mapas={"gosom_maps": proprio, "apify_maps": api})
+    for fonte in ("apify_maps", "gosom_maps"):
+        pid = criar_pesquisa(conn, max_resultados=20)
+        conn.execute("update radar.pesquisas set fonte_maps = %s where id = %s", (fonte, pid))
+    await rodar_tudo(conn, f)
+    fontes_usadas = {r[0] for r in conn.execute("select fonte_maps from radar.leads")}
+    assert fontes_usadas == {"fake_maps", "fake_maps_pago"}
+    assert conn.execute("select fonte from radar.custos_api where operacao = 'buscar' and valor > 0").fetchone()[0] == "fake_maps_pago"
