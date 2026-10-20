@@ -98,12 +98,31 @@ def _talvez_concluir_pesquisa(conn, pesquisa_id) -> None:
 
 
 async def laco(dsn: str, espera: float = 2.0) -> None:
+    """Jobs da fila + (se RADAR_CONTATO=1) despachante e conversador da Fase 3.
+
+    O contato roda em UM processo só (RADAR_CONTATO=1 em uma réplica): o ritmo de envio depende disso.
+    """
+    from datetime import datetime, timezone
+
+    from radar import conversa
+    from radar.comercial import Comercial
+
     nome = f"{socket.gethostname()}:{os.getpid()}"
     conn = psycopg.connect(dsn, autocommit=True)
     f = fontes_reais(conn)
-    log.info("worker %s no ar", nome)
+    contato = os.environ.get("RADAR_CONTATO") == "1"
+    comercial = Comercial() if contato else None
+    log.info("worker %s no ar (contato %s)", nome, "ligado" if contato else "desligado")
     while True:
-        if not await processar_um(conn, f, nome):
+        trabalhou = await processar_um(conn, f, nome)
+        if contato:
+            agora = datetime.now(timezone.utc)
+            try:
+                trabalhou |= bool(await conversa.despachar(conn, comercial, agora))
+                trabalhou |= bool(await conversa.conversar(conn, comercial, agora))
+            except Exception as e:                  # noqa: BLE001 — o laço não pode morrer
+                log.warning("contato: %s", e)
+        if not trabalhou:
             time.sleep(espera)
 
 

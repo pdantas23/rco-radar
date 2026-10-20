@@ -470,3 +470,16 @@ GRANT SELECT ON TABLE public.whatsapp_config TO service_role;
 
 \unrestrict 7gYvJGc7OfAnm4iIDXimH2fOYOcBD8wB1QMErH5p7T4OKjus6iWRZqu46zNhdnP
 
+
+-- conversas e mensagens do inbox (mínimo do COMERCIAL usado pela Fase 3 do Radar)
+CREATE TABLE IF NOT EXISTS public.conversations (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), account_id uuid, contact_id uuid,
+  whatsapp_config_id uuid, status text DEFAULT 'open', assigned_agent_id uuid, created_at timestamptz DEFAULT now());
+CREATE TABLE IF NOT EXISTS public.messages (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), conversation_id uuid REFERENCES public.conversations(id),
+  sender_type text, content_type text DEFAULT 'text', content_text text, message_id text, created_at timestamptz DEFAULT now());
+
+-- config da IA por agência (migration 135 do COMERCIAL)
+CREATE TABLE IF NOT EXISTS public.agent_configs (agency_id uuid PRIMARY KEY, radar_agent_enabled boolean NOT NULL DEFAULT false,
+  radar_agent_provider text, radar_agent_model text, radar_agent_monthly_token_limit integer,
+  radar_agent_monthly_cost_limit_usd numeric(10,6), radar_agent_prompt_override text);
+CREATE TABLE IF NOT EXISTS public.agent_provider_keys (agency_id uuid NOT NULL, provider text NOT NULL, api_key_encrypted text NOT NULL,
+  PRIMARY KEY (agency_id, provider));
