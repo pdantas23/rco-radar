@@ -1,0 +1,26 @@
+# Deploy automático no EasyPanel (compose crm-radar: worker + gosom): só quando a main muda (push em outra branch não dispara).
+# A URL do gatilho fica no segredo EASYPANEL_DEPLOY_URL (Settings > Secrets and variables > Actions).
+# Qualquer requisição a essa URL é um deploy de verdade: nunca abrir no navegador nem testar com curl.
+# Para refazer o deploy sem push: aba Actions > Deploy > Run workflow.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispara o deploy no EasyPanel
+        env:
+          DEPLOY_URL: ${{ secrets.EASYPANEL_DEPLOY_URL }}
+        run: |
+          test -n "$DEPLOY_URL" || { echo "Segredo EASYPANEL_DEPLOY_URL ausente."; exit 1; }
+          curl -fsS -X POST --max-time 30 -o /dev/null -w "EasyPanel respondeu HTTP %{http_code}\n" "$DEPLOY_URL"
