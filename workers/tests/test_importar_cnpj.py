@@ -101,7 +101,20 @@ MUN = {"1219": "teresina"}
 def test_so_ativa():
     for s in ("01", "03", "04", "08"):
         assert ic.estabelecimento(ic.campos(estab(sit=s)), MUN, None) is None
-    assert ic.estabelecimento(ic.campos(estab()), MUN, None) == ("12345678000190", "12345678", "BARBEARIA DO ZÉ", "PI", "teresina", "9602501")
+    assert ic.estabelecimento(ic.campos(estab()), MUN, None) == ("12345678000190", "12345678", "BARBEARIA DO ZÉ", "PI", "teresina", "9602501", "RUA A", "100", "64000000")
+
+
+@pytest.mark.parametrize("cep,esperado", [("64000000", "64000000"), ("64.000-000", "64000000"), ("", None),
+                                          ("123", None), ("00000000", None), ("123456789", None)])
+def test_cep_oito_digitos_ou_nulo(cep, esperado):
+    assert ic.normalizar_cep(cep) == esperado
+
+
+def test_endereco_sem_cpf_e_sem_numero():
+    c = ic.campos(estab())
+    c[14], c[15] = "SITIO DE MARIA 12345678901", "S/N"
+    r = ic.estabelecimento(c, MUN, None)
+    assert r[6:8] == ("RUA SITIO DE MARIA", "S/N")
 
 
 def test_filtro_de_uf_e_exterior():
@@ -151,8 +164,8 @@ def banco():
 
 
 def linhas_base(c):
-    return c.execute("select cnpj, razao_social, nome_fantasia, uf, municipio, cnae_principal, porte, nome_busca "
-                     "from radar.cnpj_base order by 1").fetchall()
+    return c.execute("select cnpj, razao_social, nome_fantasia, uf, municipio, cnae_principal, porte, nome_busca, "
+                     "logradouro, numero, cep from radar.cnpj_base order by 1").fetchall()
 
 
 def test_importa_cruza_empresa_e_filtra(banco):
@@ -161,7 +174,7 @@ def test_importa_cruza_empresa_e_filtra(banco):
     r = ic.importar(banco, o, {"PI"})
     assert r["total"] == 1
     assert linhas_base(banco) == [("12345678000190", "JOSE SILVA", "BARBEARIA DO ZÉ", "PI", "teresina", "9602501", "ME",
-                                   "barbearia ze jose silva")]
+                                   "barbearia ze jose silva", "RUA A", "100", "64000000")]
     assert "12345678901" not in str(linhas_base(banco))
 
 
@@ -173,6 +186,13 @@ def test_reimportar_e_idempotente_e_nao_regrava_linha_igual(banco):
     assert (r["gravadas"], r["apagadas"]) == (0, 0)
     assert len(linhas_base(banco)) == 1
     assert banco.execute("select xmin::text from radar.cnpj_base").fetchone()[0] == xmin
+
+
+def test_mudanca_so_de_endereco_atualiza_a_linha(banco):
+    ic.importar(banco, OrigemFalsa([estab()], [emp()]), {"PI"})
+    novo = estab().replace('"100"', '"200"', 1)
+    r = ic.importar(banco, OrigemFalsa([novo], [emp()]), {"PI"})
+    assert r["gravadas"] == 1 and linhas_base(banco)[0][9] == "200"
 
 
 def test_baixada_no_mes_seguinte_sai_e_outro_estado_fica(banco):

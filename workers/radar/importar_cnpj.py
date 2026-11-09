@@ -145,6 +145,11 @@ def normalizar_municipio(nome: str) -> str:
     return ALIAS_MUNICIPIO.get(n, n)
 
 
+def normalizar_cep(cep: str) -> str | None:
+    d = re.sub(r"\D", "", cep or "")
+    return d if len(d) == 8 and int(d) else None
+
+
 def nome_busca(fantasia: str, razao: str) -> str:
     f, r = normalizar_nome(fantasia), normalizar_nome(razao)
     return f"{f} {r}".strip() if f != r else r
@@ -183,7 +188,7 @@ class Bitmap:
 
 
 def estabelecimento(c: list[str], municipios: dict[str, str], ufs: set[str] | None) -> tuple | None:
-    """Linha de Estabelecimentos -> (cnpj, basico, fantasia, uf, municipio, cnae), ou None se não interessa."""
+    """Linha de Estabelecimentos -> (cnpj, basico, fantasia, uf, municipio, cnae, logradouro, numero, cep), ou None."""
     if c[5].strip() not in ATIVA:
         return None
     uf = c[19].strip().upper()
@@ -195,7 +200,10 @@ def estabelecimento(c: list[str], municipios: dict[str, str], ufs: set[str] | No
     municipio = municipios.get(c[20].strip())
     if not municipio:
         raise ValueError("município desconhecido")
-    return cnpj, c[0].strip(), sem_cpf(c[4]), uf, municipio, c[11].strip()[:7] or None
+    # logradouro com o tipo na frente, igual à montagem usada para a Casa dos Dados
+    logradouro = sem_cpf(" ".join(x for x in (c[13].strip(), c[14].strip()) if x))
+    return cnpj, c[0].strip(), sem_cpf(c[4]), uf, municipio, c[11].strip()[:7] or None, logradouro, sem_cpf(c[15]), \
+        normalizar_cep(c[18])
 
 
 def empresa(c: list[str]) -> tuple[str, str, str | None]:
@@ -244,28 +252,32 @@ class Origem:
 
 # ── carga no banco ───────────────────────────────────────────────────────
 TEMPORARIAS = """
-create temp table _estab (cnpj text, basico text, nome_fantasia text, uf text, municipio text, cnae text) on commit drop;
+create temp table _estab (cnpj text, basico text, nome_fantasia text, uf text, municipio text, cnae text,
+                          logradouro text, numero text, cep text) on commit drop;
 create temp table _empresa (basico text, razao_social text, porte text) on commit drop;
 """
 
 MONTAR_FINAL = """
 create temp table _final on commit drop as
-select distinct on (e.cnpj) e.cnpj, m.razao_social, e.nome_fantasia, e.uf, e.municipio, e.cnae, m.porte
+select distinct on (e.cnpj) e.cnpj, m.razao_social, e.nome_fantasia, e.uf, e.municipio, e.cnae, m.porte,
+       e.logradouro, e.numero, e.cep
 from _estab e join _empresa m using (basico)
 order by e.cnpj
 """
 
 GRAVAR = """
-insert into radar.cnpj_base as b (cnpj, razao_social, nome_fantasia, uf, municipio, cnae_principal, porte, nome_busca)
-select cnpj, razao_social, nome_fantasia, uf, municipio, cnae, porte, nome_busca from _final
+insert into radar.cnpj_base as b (cnpj, razao_social, nome_fantasia, uf, municipio, cnae_principal, porte,
+                                  logradouro, numero, cep, nome_busca)
+select cnpj, razao_social, nome_fantasia, uf, municipio, cnae, porte, logradouro, numero, cep, nome_busca from _final
 on conflict (cnpj) do update set
   razao_social = excluded.razao_social, nome_fantasia = excluded.nome_fantasia, uf = excluded.uf,
   municipio = excluded.municipio, cnae_principal = excluded.cnae_principal, porte = excluded.porte,
-  nome_busca = excluded.nome_busca
-where (b.razao_social, b.nome_fantasia, b.uf, b.municipio, b.cnae_principal, b.porte, b.nome_busca)
+  logradouro = excluded.logradouro, numero = excluded.numero, cep = excluded.cep, nome_busca = excluded.nome_busca
+where (b.razao_social, b.nome_fantasia, b.uf, b.municipio, b.cnae_principal, b.porte, b.logradouro, b.numero, b.cep,
+       b.nome_busca)
       is distinct from
       (excluded.razao_social, excluded.nome_fantasia, excluded.uf, excluded.municipio, excluded.cnae_principal,
-       excluded.porte, excluded.nome_busca)
+       excluded.porte, excluded.logradouro, excluded.numero, excluded.cep, excluded.nome_busca)
 """
 
 
