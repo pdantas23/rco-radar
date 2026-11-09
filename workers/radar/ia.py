@@ -18,6 +18,7 @@ from typing import Literal
 import anthropic
 from pydantic import BaseModel, Field
 
+from radar import custo_zero
 from radar.chaves import decifrar
 
 DOLAR = float(os.environ.get("RADAR_DOLAR_BRL", "5.04"))
@@ -131,6 +132,7 @@ async def responder(cfg: ConfigIA, agencia: str, ficha: str, historico: list[tup
                     tarefa: str = "Responda à última mensagem do lead.",
                     cliente: anthropic.AsyncAnthropic | None = None) -> tuple[RespostaIA, float]:
     """Devolve (resposta, custo em BRL). Levanta IAIndisponivel quando a IA não pode responder."""
+    custo_zero.exigir_liberado("IA")
     if not cfg.habilitada:
         raise IAIndisponivel("IA do Radar desligada para a agência")
     if (cfg.provedor or "anthropic") != "anthropic":

@@ -11,6 +11,8 @@ from dataclasses import dataclass
 
 import httpx
 
+from radar import custo_zero
+
 TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)
 
 
@@ -30,6 +32,7 @@ class Comercial:
         self.client = client
 
     async def _post(self, rota: str, corpo: dict) -> dict:
+        custo_zero.exigir_liberado(f"WhatsApp/COMERCIAL {rota}")
         if not self.url or not self.segredo:
             raise RuntimeError("COMERCIAL_URL / RADAR_INTERNAL_SECRET não configurados")
         c = self.client or httpx.AsyncClient(timeout=TIMEOUT)

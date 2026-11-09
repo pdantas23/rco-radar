@@ -22,7 +22,7 @@ from dataclasses import asdict
 import psycopg
 from psycopg.rows import dict_row
 
-from radar import cnpj_match, fila, geo
+from radar import cnpj_match, custo_zero, fila, geo
 from radar.estimativas import DadosFaturamento, DadosPresenca, estimar_faturamento, presenca_digital
 from radar.fontes.base import ConsultaMaps
 from radar.fontes.instagram_site import instagram_do_site
@@ -94,6 +94,8 @@ def pode_gastar(conn, agency_id, previsto: float) -> bool:
 
 
 def custo(conn, agency_id, fonte: str, operacao: str, valor: float, qtd: int = 1, *, pesquisa_id=None, lead_id=None):
+    if valor and custo_zero.ativo():
+        raise custo_zero.FontePagaBloqueada(f"modo só dados abertos: custo de {valor} em {fonte}/{operacao}")
     conn.execute(
         """insert into radar.custos_api (agency_id, fonte, operacao, pesquisa_id, lead_id, qtd, valor, estimado)
            values (%s, %s, %s, %s, %s, %s, %s, true)""",
@@ -109,6 +111,8 @@ def _config(conn, agency_id, chave: str) -> dict:
 
 
 def anuncios_ligados(conn, agency_id) -> bool:
+    if custo_zero.ativo():
+        return False
     return bool(_config(conn, agency_id, "anuncios_ativos").get("ligado"))
 
 
