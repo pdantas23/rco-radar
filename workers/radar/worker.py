@@ -40,9 +40,20 @@ def geocodificador(conn):
     return geocodificar
 
 
+def fonte_cnpj(conn):
+    """RADAR_FONTE_CNPJ: 'base_local' (padrão, custo zero) ou 'casadosdados' (paga)."""
+    from radar.fontes.cnpj import CnpjCasaDosDados
+    from radar.fontes.cnpj_local import CnpjBaseLocal
+    escolha = os.environ.get("RADAR_FONTE_CNPJ", "base_local").strip().lower()
+    if escolha == "base_local":
+        return CnpjBaseLocal(conn)
+    if escolha == "casadosdados":
+        return CnpjCasaDosDados()
+    raise ValueError(f"RADAR_FONTE_CNPJ inválida: {escolha!r} (use base_local ou casadosdados)")
+
+
 def fontes_reais(conn) -> etapas.Fontes:
     from radar.fontes.anuncios_apify import AnunciosApify
-    from radar.fontes.cnpj import CnpjCasaDosDados
     from radar.fontes.instagram_apify import InstagramApify
     from radar.fontes.maps_apify import MapsApify
     from radar.fontes.maps_gosom import MapsGosom
@@ -54,7 +65,7 @@ def fontes_reais(conn) -> etapas.Fontes:
     mapas = {"gosom_maps": proprio}
     if apify:
         mapas["apify_maps"] = apify
-    return etapas.Fontes(proprio, CnpjCasaDosDados(), InstagramApify(), AnunciosApify(), geocodificador(conn),
+    return etapas.Fontes(proprio, fonte_cnpj(conn), InstagramApify(), AnunciosApify(), geocodificador(conn),
                          mapas=mapas)
 
 

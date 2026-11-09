@@ -318,7 +318,8 @@ async def enriquecer_cnpj(conn, job: fila.Job, f: Fontes) -> None:
     ag = job.agency_id
     exigir_ativo(conn, ag)
     lead = _cur(conn).execute("select * from radar.leads where id = %s", (job.lead_id,)).fetchone()
-    if not pode_gastar(conn, ag, f.cnpj.estimar(10)):
+    previsto = f.cnpj.estimar(10)
+    if previsto and not pode_gastar(conn, ag, previsto):         # fonte grátis não depende do teto
         conn.execute("update radar.leads set cnpj_status = 'nao_verificado' where id = %s", (lead["id"],))
         return
     cands = await f.cnpj.buscar_por_nome(lead["nome"], lead["cidade"] or "", lead["estado"] or "")
