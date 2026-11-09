@@ -88,6 +88,14 @@ def completar_brasilapi(d: DadosCnpj, item: dict) -> DadosCnpj:
         d.socios = [{"nome": s.get("nome_socio"), "qualificacao": s.get("qualificacao_socio")}
                     for s in item["qsa"]]
     d.porte = d.porte or PORTE.get((item.get("porte") or "").upper())
+    # a base própria só traz o mínimo; a Casa dos Dados já preenche estes e nada muda para ela
+    d.abertura = d.abertura or _data(item.get("data_inicio_atividade"))
+    d.capital_social = d.capital_social if d.capital_social is not None else item.get("capital_social")
+    d.natureza = d.natureza or item.get("natureza_juridica")
+    if not d.logradouro:
+        d.logradouro = " ".join(x for x in (item.get("descricao_tipo_de_logradouro"), item.get("logradouro")) if x)
+        d.numero = d.numero or str(item.get("numero") or "")
+        d.cep = d.cep or re.sub(r"\D", "", str(item.get("cep") or ""))
     d.bruto["brasilapi"] = limpar(item)
     return d
 
