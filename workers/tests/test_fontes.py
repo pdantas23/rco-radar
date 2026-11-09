@@ -74,3 +74,13 @@ def test_anuncios_so_conta_a_pagina_do_negocio():
     assert len(r.amostras) == 2 and "view_all_page_id=123" in r.link_biblioteca
     vazio = anuncios_apify.resumir([itens[2]], "Barbearia do Zé", None)
     assert vazio.qtd_ativos == 0
+
+
+def test_instagram_pago_depende_de_token_e_da_chave_de_config(monkeypatch):
+    from radar.fontes.instagram_apify import InstagramApify
+    monkeypatch.delenv("RADAR_INSTAGRAM_PAGO", raising=False)
+    monkeypatch.delenv("APIFY_TOKEN", raising=False)
+    assert not InstagramApify("").habilitada
+    assert InstagramApify("t").habilitada
+    monkeypatch.setenv("RADAR_INSTAGRAM_PAGO", "0")
+    assert not InstagramApify("t").habilitada

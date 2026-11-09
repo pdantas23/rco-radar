@@ -50,7 +50,8 @@ async def test_ruido_do_maps_no_nome(base):
 
 
 async def test_erro_de_digitacao_ainda_acha(base):
-    assert "22222222000122" in await cnpjs(base, "Padaria Sao Joaoo", "Teresina", "PI")
+    # nenhum termo é substring do nome na base: só a semelhança de trigramas acha
+    assert "22222222000122" in await cnpjs(base, "Padariaa Joaoo", "Teresina", "PI")
 
 
 async def test_cidade_homonima_nao_mistura_uf(base):
