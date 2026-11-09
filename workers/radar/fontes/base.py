@@ -128,6 +128,8 @@ class PerfilInstagram:
 
 
 class FonteInstagram(Adaptador):
+    habilitada: bool = True           # False: nenhuma chamada é feita, o campo fica 'nao_verificado'
+
     async def perfil(self, usuario: str) -> PerfilInstagram | None:
         raise NotImplementedError
 

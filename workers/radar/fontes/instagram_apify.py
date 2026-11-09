@@ -58,6 +58,11 @@ class InstagramApify(FonteInstagram):
         self.token = token or os.environ.get("APIFY_TOKEN", "")
         self.client = client
 
+    @property
+    def habilitada(self) -> bool:
+        """Paga: exige token e pode ser desligada com RADAR_INSTAGRAM_PAGO=0."""
+        return bool(self.token) and os.environ.get("RADAR_INSTAGRAM_PAGO", "1") != "0"
+
     async def perfil(self, usuario: str) -> PerfilInstagram | None:
         itens = await rodar_ator(ATOR_PERFIL, {"usernames": [usuario.lstrip("@")]}, self.token, self.client)
         self.custo_ultima_chamada = self.estimar(len(itens))

@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from radar.fontes.instagram_site import mesmo_dominio
 from radar.telefone import whatsapp_de_link
 
 TIMEOUT = httpx.Timeout(connect=8.0, read=12.0, write=8.0, pool=8.0)
@@ -165,6 +166,9 @@ async def verificar(url: str | None, client: httpx.AsyncClient | None = None) ->
                 continue
             if resp.status_code == 200 and "html" in resp.headers.get("content-type", ""):
                 resultado = analisar_html(resp.text, str(resp.url))
+                if not mesmo_dominio(dominio, resp.url.host):
+                    resultado.instagram_user = None      # redirecionou para outro domínio: o @ não é do negócio
+                    resultado.redes.pop("instagram", None)
                 raiz = str(resp.url).rstrip("/")
                 for caminho in PAGINAS_CONTATO:
                     try:
