@@ -127,9 +127,13 @@ async def rodar_tudo(conn, f, limite=200):
     raise AssertionError("fila não esvaziou")
 
 
-def fontes(negocios, ig=None, maps=None):
+async def sem_arroba_no_site(url):
+    return None
+
+
+def fontes(negocios, ig=None, maps=None, instagram_site=sem_arroba_no_site):
     return etapas.Fontes(maps or FakeMaps(negocios), FakeCnpj(), ig or FakeInstagram(), FakeAnuncios(), geo,
-                         site_sem_site)
+                         site_sem_site, instagram_site=instagram_site)
 
 
 async def test_exemplo_do_levantamento_vira_quente(conn):
@@ -372,3 +376,56 @@ async def test_proprio_falha_mostra_erro_e_nao_vai_para_a_api(conn):
     await rodar_tudo(conn, f)
     assert conn.execute("select status from radar.pesquisas where id = %s", (pid,)).fetchone()[0] == "concluida"
     assert conn.execute("select count(*) from radar.leads").fetchone()[0] == 1
+
+
+# ── @ pelo site antes da busca paga ──────────────────────────────────────
+class IgContador(FakeInstagram):
+    def __init__(self, habilitada=True):
+        super().__init__()
+        self.habilitada, self.procuras, self.perfis = habilitada, 0, 0
+
+    async def procurar(self, nome, cidade):
+        self.procuras += 1
+        return await super().procurar(nome, cidade)
+
+    async def perfil(self, usuario):
+        self.perfis += 1
+        return await super().perfil(usuario)
+
+
+async def arroba_do_site(url):
+    return "barbeariadoze_site"
+
+
+async def test_arroba_no_site_evita_a_busca_paga(conn):
+    criar_pesquisa(conn, max_resultados=10)
+    ig = IgContador()
+    await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé", site="ze.com.br")], ig=ig, instagram_site=arroba_do_site))
+    assert (ig.procuras, ig.perfis) == (0, 1)
+    assert conn.execute("select instagram_status from radar.leads").fetchone()[0] == "encontrado"
+    assert conn.execute("select count(*) from radar.custos_api where operacao = 'procurar'").fetchone()[0] == 0
+
+
+async def test_sem_arroba_no_site_a_busca_paga_roda(conn):
+    criar_pesquisa(conn, max_resultados=10)
+    ig = IgContador()
+    await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé", site="ze.com.br")], ig=ig))
+    assert ig.procuras == 1
+
+
+async def test_fonte_paga_desligada_nao_procura_e_nao_le_perfil(conn):
+    criar_pesquisa(conn, max_resultados=10)
+    ig = IgContador(habilitada=False)
+    await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé", site="ze.com.br")], ig=ig, instagram_site=arroba_do_site))
+    assert (ig.procuras, ig.perfis) == (0, 0)
+    assert conn.execute("select instagram_status from radar.leads").fetchone()[0] == "encontrado"
+    assert conn.execute("""select instagram_user, instagram_origem from radar.presenca
+                           where instagram_user is not null""").fetchone() == ("barbeariadoze_site", "site")
+
+
+async def test_fonte_paga_desligada_e_sem_arroba_fica_nao_verificado(conn):
+    criar_pesquisa(conn, max_resultados=10)
+    ig = IgContador(habilitada=False)
+    await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé", site="ze.com.br")], ig=ig))
+    assert ig.procuras == 0
+    assert conn.execute("select instagram_status, status from radar.leads").fetchone() == ("nao_verificado", "pontuado")

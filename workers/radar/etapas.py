@@ -25,6 +25,7 @@ from psycopg.rows import dict_row
 from radar import cnpj_match, fila, geo
 from radar.estimativas import DadosFaturamento, DadosPresenca, estimar_faturamento, presenca_digital
 from radar.fontes.base import ConsultaMaps
+from radar.fontes.instagram_site import instagram_do_site
 from radar.pontuacao import FAIXAS_PADRAO, PARAMS_PADRAO, PESOS_PADRAO, LeadParaPontuar, Regra, pontuar
 from radar.site import verificar as verificar_site
 from radar.telefone import normalizar, whatsapp_de_link
@@ -51,10 +52,12 @@ class FalhaDoMapsProprio(Exception):
 class Fontes:
     """Os adaptadores em uso. Trocar uma fonte = passar outro objeto aqui."""
 
-    def __init__(self, maps, cnpj, instagram, anuncios, geocodificar, site=verificar_site, mapas=None):
+    def __init__(self, maps, cnpj, instagram, anuncios, geocodificar, site=verificar_site, mapas=None,
+                 instagram_site=instagram_do_site):
         self.maps, self.cnpj, self.instagram, self.anuncios = maps, cnpj, instagram, anuncios
         self.geocodificar = geocodificar          # async (cidade, uf, agency_id) -> (lat, lng) | None
         self.site = site
+        self.instagram_site = instagram_site      # async (url) -> usuario | None; grátis, roda antes da busca paga
         # plataforma escolhida na pesquisa (radar.pesquisas.fonte_maps): 'gosom_maps' | 'apify_maps'
         self.mapas = mapas or {}
 
@@ -244,9 +247,16 @@ async def enriquecer_instagram(conn, job: fila.Job, f: Fontes) -> None:
     usuario, origem, confianca = job.payload.get("instagram"), "site", 100
     if job.payload.get("humano"):
         origem = "humano"
+    achado_gratis = False
+    if not usuario and lead["site"]:
+        usuario = await f.instagram_site(lead["site"])      # grátis: antes de qualquer chamada paga
+        achado_gratis = bool(usuario)
+    paga = getattr(f.instagram, "habilitada", True)
     sem_orcamento = False
     if not usuario:
-        if pode_gastar(conn, ag, f.instagram.estimar(1)):
+        if not paga:
+            sem_orcamento = True                            # não procurou: 'nao_verificado', e não 'nao_encontrado'
+        elif pode_gastar(conn, ag, f.instagram.estimar(1)):
             candidatos = await f.instagram.procurar(lead["nome"], lead["cidade"] or "")
             custo(conn, ag, f.instagram.chave, "procurar", f.instagram.custo_ultima_chamada,
                   pesquisa_id=job.pesquisa_id, lead_id=lead["id"])
@@ -258,13 +268,15 @@ async def enriquecer_instagram(conn, job: fila.Job, f: Fontes) -> None:
         else:
             sem_orcamento = True
     perfil = None
-    if usuario and confianca >= LIMITE_CONFIANCA_IG:
+    if usuario and confianca >= LIMITE_CONFIANCA_IG and paga:
         if pode_gastar(conn, ag, f.instagram.estimar(1)):
             perfil = await f.instagram.perfil(usuario)
             custo(conn, ag, f.instagram.chave, "perfil", f.instagram.custo_ultima_chamada,
                   pesquisa_id=job.pesquisa_id, lead_id=lead["id"])
         else:
             sem_orcamento = True
+    if achado_gratis:
+        _gravar_arroba_do_site(conn, ag, lead["id"], usuario)
     site = conn.execute("""select site_existe, site_responde, site_https, site_tem_whatsapp, site_tem_meta_pixel,
                                   site_tem_google_tag, site_tem_google_ads, site_plataforma, facebook_pagina,
                                   redes, site_emails
@@ -283,11 +295,25 @@ async def enriquecer_instagram(conn, job: fila.Job, f: Fontes) -> None:
              perfil.posts_total, perfil.ultimo_post_em, perfil.posts_30d, perfil.bio, perfil.bio_tem_link,
              perfil.bio_tem_whatsapp, perfil.conta_comercial, f.instagram.chave,
              json.dumps(perfil.bruto) if perfil.bruto else None, *site))
-    status = "encontrado" if perfil else ("nao_verificado" if sem_orcamento else "nao_encontrado")
+    # @ conhecido sem leitura do perfil (fonte paga desligada) conta como encontrado
+    conhecido = bool(usuario) and confianca >= LIMITE_CONFIANCA_IG and not paga
+    status = "encontrado" if perfil or conhecido else ("nao_verificado" if sem_orcamento else "nao_encontrado")
     conn.execute("update radar.leads set instagram_status = %s where id = %s", (status, lead["id"]))
     if not job.payload.get("sem_anuncios") and anuncios_ligados(conn, ag):
         fila.enfileirar(conn, "verificar_anuncios", agency_id=ag, pesquisa_id=job.pesquisa_id, lead_id=lead["id"],
                         payload={"pagina": job.payload.get("facebook") or (perfil.usuario if perfil else None)})
+
+
+def _gravar_arroba_do_site(conn, ag, lead_id, usuario: str) -> None:
+    """Guarda o @ achado de graça na linha de presença do site (ou cria uma, se o site falhou)."""
+    ultima = conn.execute("select id from radar.presenca where lead_id = %s order by coletado_em desc, id desc limit 1",
+                          (lead_id,)).fetchone()
+    if ultima:
+        conn.execute("update radar.presenca set instagram_user = %s, instagram_origem = 'site' where id = %s",
+                     (usuario, ultima[0]))
+    else:
+        conn.execute("""insert into radar.presenca (agency_id, lead_id, instagram_user, instagram_origem)
+                        values (%s, %s, %s, 'site')""", (ag, lead_id, usuario))
 
 
 # ── F6 · anúncios ────────────────────────────────────────────────────────
