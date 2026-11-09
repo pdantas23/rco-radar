@@ -1,7 +1,7 @@
 """F3 · CNPJ pela base própria (radar.cnpj_base, Dados Abertos da Receita): custo zero.
 
 Candidatos por nome + município na tabela local; o detalhe (sócios, Simples/MEI, abertura, capital,
-endereço) continua vindo da BrasilAPI, grátis, só para o CNPJ escolhido. A decisão é a mesma do cnpj_match.
+dados extras) continua vindo da BrasilAPI, grátis, só para o CNPJ escolhido. A decisão é a mesma do cnpj_match.
 """
 
 import httpx
@@ -16,7 +16,7 @@ LIMITE = 10                     # candidatos que vão para o cnpj_match (igual �
 MIN_TRIGRAMA = 3                # termo menor que isso não usa o índice
 
 BUSCA = """
-select cnpj, razao_social, nome_fantasia, uf, municipio, cnae_principal, porte
+select cnpj, razao_social, nome_fantasia, uf, municipio, cnae_principal, porte, logradouro, numero, cep
 from radar.cnpj_base
 where uf = %(uf)s and municipio = %(municipio)s
   and (nome_busca like any(%(termos)s) or nome_busca operator(radar.%%) %(nome)s)
@@ -35,14 +35,14 @@ def _municipio(nome: str) -> str:
 
 
 def converter(linha: tuple) -> DadosCnpj:
-    cnpj, razao, fantasia, uf, municipio, cnae, porte = linha
+    cnpj, razao, fantasia, uf, municipio, cnae, porte, logradouro, numero, cep = linha
     cnpj = cnpj.strip()
     return DadosCnpj(
         cnpj=cnpj, razao_social=razao, nome_fantasia=fantasia, situacao="ATIVA",   # a base só guarda ativas
         abertura=None, porte=porte, natureza=None, capital_social=None,
         cnae_principal=(cnae or "").strip() or None, cnae_descricao=None, cnaes_secundarios=[], regime=None,
-        socios=[], email_rf=None, telefone_rf=None, logradouro="", numero="", municipio=municipio,
-        uf=uf.strip(), cep="", eh_filial=cnpj[8:12] != "0001", cnpj_matriz=cnpj[:8] + "0001",
+        socios=[], email_rf=None, telefone_rf=None, logradouro=logradouro, numero=numero, municipio=municipio,
+        uf=uf.strip(), cep=(cep or "").strip(), eh_filial=cnpj[8:12] != "0001", cnpj_matriz=cnpj[:8] + "0001",
         bruto={"base_local": {"cnpj": cnpj, "razao_social": razao, "nome_fantasia": fantasia}},
     )
 
