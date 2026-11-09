@@ -12,7 +12,7 @@ import time
 import httpx
 import psycopg
 
-from radar import etapas, fila
+from radar import custo_zero, etapas, fila
 
 log = logging.getLogger("radar.worker")
 NOMINATIM = "https://nominatim.openstreetmap.org/search"
@@ -52,7 +52,25 @@ def fonte_cnpj(conn):
     raise ValueError(f"RADAR_FONTE_CNPJ inválida: {escolha!r} (use base_local ou casadosdados)")
 
 
+def fontes_custo_zero(conn) -> etapas.Fontes:
+    """Modo só dados abertos: nenhum adaptador pago é criado, nem com token no ambiente."""
+    from radar.fontes.cnpj_local import CnpjBaseLocal
+    from radar.fontes.maps_gosom import MapsGosom
+    if os.environ.get("RADAR_FONTE_CNPJ", "base_local").strip().lower() != "base_local":
+        raise ValueError("RADAR_SO_DADOS_ABERTOS=1 exige RADAR_FONTE_CNPJ=base_local")
+    proprio = MapsGosom()
+    return etapas.Fontes(proprio, CnpjBaseLocal(conn), custo_zero.FonteBloqueada("Instagram (Apify)"),
+                         custo_zero.FonteBloqueada("Anúncios (Apify)"), geocodificador(conn),
+                         mapas={"gosom_maps": proprio, "apify_maps": custo_zero.FonteBloqueada("Maps (Apify)")})
+
+
+def contato_ligado() -> bool:
+    return os.environ.get("RADAR_CONTATO") == "1" and not custo_zero.ativo()
+
+
 def fontes_reais(conn) -> etapas.Fontes:
+    if custo_zero.ativo():
+        return fontes_custo_zero(conn)
     from radar.fontes.anuncios_apify import AnunciosApify
     from radar.fontes.instagram_apify import InstagramApify
     from radar.fontes.maps_apify import MapsApify
@@ -85,7 +103,7 @@ async def processar_um(conn: psycopg.Connection, f: etapas.Fontes, nome: str,
             conn.execute("update radar.pesquisas set status = 'cancelada' where id = %s", (job.pesquisa_id,))
     except Exception as e:                      # noqa: BLE001 — qualquer falha vira retentativa
         log.warning("job %s (%s) falhou: %s", job.id, job.tipo, e)
-        if isinstance(e, etapas.FalhaDoMapsProprio):
+        if isinstance(e, (etapas.FalhaDoMapsProprio, custo_zero.FontePagaBloqueada)):
             vai_tentar = fila.falhar(conn, job, str(e), definitiva=True)
         else:
             vai_tentar = fila.falhar(conn, job, f"{type(e).__name__}: {e}")
@@ -121,9 +139,10 @@ async def laco(dsn: str, espera: float = 2.0) -> None:
     nome = f"{socket.gethostname()}:{os.getpid()}"
     conn = psycopg.connect(dsn, autocommit=True)
     f = fontes_reais(conn)
-    contato = os.environ.get("RADAR_CONTATO") == "1"
+    contato = contato_ligado()
     comercial = Comercial() if contato else None
-    log.info("worker %s no ar (contato %s)", nome, "ligado" if contato else "desligado")
+    log.info("worker %s no ar (contato %s%s)", nome, "ligado" if contato else "desligado",
+             ", modo só dados abertos" if custo_zero.ativo() else "")
     while True:
         trabalhou = await processar_um(conn, f, nome)
         if contato:

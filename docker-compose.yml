@@ -26,6 +26,10 @@ services:
       CASADOSDADOS_API_KEY: ${CASADOSDADOS_API_KEY:-}
       # base_local (padrão, custo zero) ou casadosdados (paga)
       RADAR_FONTE_CNPJ: ${RADAR_FONTE_CNPJ:-base_local}
+      # 1 = custo zero garantido: sem Apify, Casa dos Dados, IA e WhatsApp (ignora RADAR_CONTATO)
+      RADAR_SO_DADOS_ABERTOS: ${RADAR_SO_DADOS_ABERTOS:-0}
+      # 0 = desliga a busca e a leitura de perfil pagas do Instagram (o @ do site continua)
+      RADAR_INSTAGRAM_PAGO: ${RADAR_INSTAGRAM_PAGO:-1}
       # despachante + conversador (Fase 3): ligado em UMA réplica só — o ritmo de envio depende disso
       RADAR_CONTATO: "1"
     cpus: 0.5

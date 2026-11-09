@@ -6,6 +6,8 @@ custo na resposta; cada adaptador estima pelo preço por resultado do ator.
 
 import httpx
 
+from radar import custo_zero
+
 BASE = "https://api.apify.com/v2/acts"
 TIMEOUT = httpx.Timeout(connect=15.0, read=310.0, write=15.0, pool=15.0)
 
@@ -17,6 +19,7 @@ class ErroApify(RuntimeError):
 async def rodar_ator(ator: str, entrada: dict, token: str,
                      client: httpx.AsyncClient | None = None) -> list[dict]:
     """`ator` no formato "dono/nome" (ex.: compass/crawler-google-places)."""
+    custo_zero.exigir_liberado(f"Apify {ator}")
     if not token:
         raise ErroApify("APIFY_TOKEN não configurado")
     url = f"{BASE}/{ator.replace('/', '~')}/run-sync-get-dataset-items"

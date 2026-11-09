@@ -11,6 +11,7 @@ from datetime import date
 
 import httpx
 
+from radar import custo_zero
 from radar.cnpj_match import RUIDO_NOME
 from radar.fontes.base import DadosCnpj, FonteCnpj
 from radar.privacidade import limpar
@@ -111,6 +112,7 @@ class CnpjCasaDosDados(FonteCnpj):
         self.client = client
 
     async def _post_casa(self, corpo: dict) -> list[dict]:
+        custo_zero.exigir_liberado("Casa dos Dados")
         c = self.client or httpx.AsyncClient(timeout=TIMEOUT)
         try:
             r = await c.post(CASA_URL, params={"tipo_resultado": "completo"}, json=corpo,
