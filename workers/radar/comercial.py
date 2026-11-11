@@ -3,9 +3,14 @@
 POST {COMERCIAL_URL}/api/internal/radar/enviar  — envia pelo WhatsApp da agência; conversa no inbox.
 POST {COMERCIAL_URL}/api/internal/radar/passar  — passa a conversa para um humano (e cria o negócio
                                                    quando o lead é qualificado).
+POST {COMERCIAL_URL}/api/internal/radar/descartar — triagem de LP decidiu 'descartar': encerra a conversa e
+                                                   etiqueta o contato com "Fora do perfil".
+Origem 'lp' (triagem IA, sem radar.leads): lead_id = None e a conversa é identificada por conversa_id
+(radar.conversas.id) no /enviar; o telefone é opcional (o COMERCIAL usa o do contato).
 Autenticação: header x-radar-secret = RADAR_INTERNAL_SECRET.
 """
 
+import json
 import os
 from dataclasses import dataclass
 
@@ -37,7 +42,9 @@ class Comercial:
             raise RuntimeError("COMERCIAL_URL / RADAR_INTERNAL_SECRET não configurados")
         c = self.client or httpx.AsyncClient(timeout=TIMEOUT)
         try:
-            r = await c.post(f"{self.url}{rota}", json=corpo, headers={"x-radar-secret": self.segredo})
+            # ids vêm do banco como uuid.UUID: json= do httpx não serializa UUID (TypeError antes de sair)
+            r = await c.post(f"{self.url}{rota}", content=json.dumps(corpo, default=str),
+                             headers={"x-radar-secret": self.segredo, "content-type": "application/json"})
         finally:
             if self.client is None:
                 await c.aclose()
@@ -49,9 +56,10 @@ class Comercial:
         return dados
 
     async def enviar(self, *, agency_id, lead_id, whatsapp_config_id, telefone, nome, texto,
-                     primeira: bool, idempotency_key: str | None = None) -> ResultadoEnvio:
+                     primeira: bool, idempotency_key: str | None = None, conversa_id=None) -> ResultadoEnvio:
         d = await self._post("/api/internal/radar/enviar", {
-            "agency_id": agency_id, "lead_id": lead_id, "whatsapp_config_id": whatsapp_config_id,
+            "agency_id": agency_id, "lead_id": lead_id, "conversa_id": conversa_id,
+            "whatsapp_config_id": whatsapp_config_id,
             "telefone": telefone, "nome": nome, "texto": texto, "primeira": primeira,
             "idempotency_key": idempotency_key})
         return ResultadoEnvio(bool(d.get("ok")), d.get("conversation_id"), d.get("contact_id"),
@@ -62,3 +70,7 @@ class Comercial:
         return await self._post("/api/internal/radar/passar", {
             "agency_id": agency_id, "lead_id": lead_id, "conversation_id": conversation_id,
             "motivo": motivo, "campos": campos or {}, "resumo": resumo})
+
+    async def descartar(self, *, agency_id, conversa_id, motivo: str | None = None) -> dict:
+        return await self._post("/api/internal/radar/descartar", {
+            "agency_id": agency_id, "conversa_id": conversa_id, "motivo": motivo})

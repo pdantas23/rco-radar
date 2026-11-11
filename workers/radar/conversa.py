@@ -8,6 +8,12 @@ Desenho aprovado pelo Philip em 20/10/2026:
 
 Nada sai sem: disparo confirmado por humano, registro em disparos_leads antes da tentativa,
 janela de horário da agência, limites por hora/dia da conexão e a trava de radar.gate.
+
+Triagem IA (docs/triagem-ia.md): conversa de LP (origem 'lp', sem radar.leads) aberta pelo webhook do
+COMERCIAL recebe a 1ª mensagem automaticamente (a integração marcada para triagem é a autorização), com
+a mesma janela, limites e trava; o registro prévio fica em conversas.contexto.primeira. A cada resposta, a
+nota sai de radar.triagem (fatos da IA + respostas da LP + radar.criterios_triagem), não da IA. Sem
+critérios ativos para a agência/origem, vale o fluxo de antes (intenção da IA).
 """
 
 import json
@@ -18,7 +24,7 @@ from zoneinfo import ZoneInfo
 
 from psycopg.rows import dict_row
 
-from radar import gate, ia
+from radar import gate, ia, triagem
 from radar.comercial import Comercial
 
 log = logging.getLogger("radar.conversa")
@@ -73,7 +79,11 @@ def _ficha(conn, lead: dict) -> str:
 
 # ── despachante: 1ª mensagem ─────────────────────────────────────────────
 async def despachar(conn, comercial: Comercial, agora: datetime) -> int:
-    """Envia no máximo uma 1ª mensagem por disparo ativo por rodada. Devolve quantas enviou."""
+    """1ªs mensagens: lotes do Radar (uma por disparo ativo por rodada) e conversas de LP. Devolve quantas enviou."""
+    return await _despachar_radar(conn, comercial, agora) + await despachar_lp(conn, comercial, agora)
+
+
+async def _despachar_radar(conn, comercial: Comercial, agora: datetime) -> int:
     enviados = 0
     disparos = _cur(conn).execute(
         """select d.*, ab.texto as abordagem_texto from radar.disparos d
@@ -121,14 +131,19 @@ async def despachar(conn, comercial: Comercial, agora: datetime) -> int:
 
 
 def _dentro_dos_limites(conn, conexao, disparo, cfg, agora) -> bool:
+    """1ªs mensagens na conexão (lotes do Radar + LP) dentro dos limites por hora/dia."""
     hora, dia = conn.execute(
-        """select count(*) filter (where dl.enviado_em > %s - interval '1 hour'),
-                  count(*) filter (where dl.enviado_em > %s - interval '1 day')
-           from radar.disparos_leads dl join radar.disparos d on d.id = dl.disparo_id
-           join radar.agencias a on a.agency_id = d.agency_id
-           where dl.status = 'enviado' and coalesce(d.whatsapp_config_id, a.whatsapp_config_id) = %s""",
-        (agora, agora, conexao)).fetchone()
-    lim_hora = min(disparo["limite_hora"] or 10**6, cfg.get("limite_hora") or 10**6)
+        """select count(*) filter (where t > %s - interval '1 hour'), count(*) filter (where t > %s - interval '1 day')
+           from (select dl.enviado_em as t
+                   from radar.disparos_leads dl join radar.disparos d on d.id = dl.disparo_id
+                   join radar.agencias a on a.agency_id = d.agency_id
+                  where dl.status = 'enviado' and coalesce(d.whatsapp_config_id, a.whatsapp_config_id) = %s
+                 union all
+                 select c.iniciada_em from radar.conversas c join radar.agencias a on a.agency_id = c.agency_id
+                  where c.origem = 'lp' and c.iniciada_em is not null
+                    and coalesce(c.whatsapp_config_id, a.whatsapp_config_id) = %s) x""",
+        (agora, agora, conexao, conexao)).fetchone()
+    lim_hora = min((disparo or {}).get("limite_hora") or 10**6, cfg.get("limite_hora") or 10**6)
     return hora < lim_hora and dia < (cfg.get("limite_dia") or 10**6)
 
 
@@ -190,6 +205,96 @@ async def _enviar_primeira(conn, comercial, d, cfg, conexao, item, agora, local)
     return True
 
 
+# ── despachante de LP: 1ª mensagem automática ────────────────────────────
+def _primeira(conn, conversa_id, **estado) -> None:
+    """Registro da 1ª mensagem de LP em contexto.primeira (status pendente | enviando | enviado | falhou)."""
+    conn.execute("""update radar.conversas set contexto = jsonb_set(contexto, '{primeira}',
+                        coalesce(contexto->'primeira', '{}') || %s::jsonb) where id = %s""",
+                 (json.dumps(estado, default=str), conversa_id))
+
+
+async def despachar_lp(conn, comercial: Comercial, agora: datetime, max_conversas: int = 20) -> int:
+    """Conversas de LP abertas pelo webhook e ainda sem 1ª mensagem. Sem aprovação humana (contrato), mas com
+    janela, limites da agência/conexão, intervalo mínimo e a trava de radar.gate."""
+    enviados = 0
+    pendentes = _cur(conn).execute(
+        """select c.* from radar.conversas c
+           where c.origem = 'lp' and c.estado = 'ia' and c.iniciada_em is null
+             and coalesce(c.contexto->'primeira'->>'status', 'pendente') = 'pendente'
+             and coalesce((c.contexto->'primeira'->>'agendado_para')::timestamptz, '-infinity') <= %s
+           order by c.id limit %s for update skip locked""", (agora, max_conversas)).fetchall()
+    for c in pendentes:
+        cfg = _agencia(conn, c["agency_id"])
+        if not cfg or not cfg.get("ativo"):
+            continue
+        local = _agora_local(cfg, agora)
+        inicio, fim = cfg.get("janela_inicio") or JANELA_PADRAO[0], cfg.get("janela_fim") or JANELA_PADRAO[1]
+        if not (inicio <= local.time() < fim):
+            continue                                # espera a janela abrir; não é falha
+        conexao = c["whatsapp_config_id"] or cfg.get("whatsapp_config_id")
+        if conexao is None:
+            log.warning("conversa LP %s sem conexão de WhatsApp", c["id"])
+            continue
+        if not _dentro_dos_limites(conn, conexao, None, cfg, agora):
+            continue
+        ultima = conn.execute("""select max(iniciada_em) from radar.conversas
+                                 where origem = 'lp' and whatsapp_config_id = %s""", (conexao,)).fetchone()[0]
+        if ultima and agora - ultima < timedelta(seconds=cfg.get("intervalo_min_seg") or 0):
+            continue
+        if await _enviar_primeira_lp(conn, comercial, c, cfg, conexao, agora, local):
+            enviados += 1
+    return enviados
+
+
+async def _enviar_primeira_lp(conn, comercial, c, cfg, conexao, agora, local) -> bool:
+    ctx = c["contexto"] or {}
+    telefone = ctx.get("telefone")                 # opcional: o COMERCIAL usa o telefone do contato
+    bloqueado = bool(telefone) and conn.execute(
+        "select exists(select 1 from radar.bloqueios where agency_id = %s and telefone = %s)",
+        (c["agency_id"], telefone)).fetchone()[0]
+    texto = triagem.mensagem(conn, c["agency_id"], "lp", "inicial", cfg.get("nome_agencia") or "agência") or ""
+    trava = gate.checar(texto, gate.Contexto(
+        lead_status="lp", motivo_descarte=None, bloqueado=bloqueado, ultimo_contato_mesmo_canal=None,
+        confirmado_recontato=False,
+        disparo_confirmado=True,                   # a integração marcada para triagem é a autorização (contrato)
+        registrado_em_disparos_leads=True,         # o registro é a própria conversa (contexto.primeira)
+        agora_local_lead=local, janela_inicio=cfg.get("janela_inicio") or JANELA_PADRAO[0],
+        janela_fim=cfg.get("janela_fim") or JANELA_PADRAO[1], canal="whatsapp_nao_oficial",
+        template_aprovado=False, primeira_mensagem=True))
+    if not trava:
+        _falhou_primeira(conn, c, "; ".join(trava.motivos), agora)
+        return False
+    # registro ANTES da tentativa (regra de arquitetura): se o processo cair aqui, não reenvia sozinho
+    _primeira(conn, c["id"], status="enviando", em=agora.isoformat())
+    try:
+        r = await comercial.enviar(agency_id=c["agency_id"], lead_id=None, conversa_id=str(c["id"]),
+                                   whatsapp_config_id=conexao, telefone=telefone, nome=ctx.get("nome") or "",
+                                   texto=texto, primeira=True, idempotency_key=f"radar-lp-{c['id']}")
+    except Exception as e:                         # noqa: BLE001 — erro de rede: volta para a fila
+        log.warning("1ª mensagem da conversa LP %s falhou (%s); tenta de novo em 5 min", c["id"], e)
+        _primeira(conn, c["id"], status="pendente", motivo=str(e)[:500],
+                  agendado_para=(agora + timedelta(minutes=5)).isoformat())
+        return False
+    if not r.ok:
+        _falhou_primeira(conn, c, r.motivo or "erro_envio", agora)
+        return False
+    _primeira(conn, c["id"], status="enviado", em=agora.isoformat())
+    conn.execute("""update radar.conversas set iniciada_em = %s, lida_ate = %s, proximo_followup_em = %s,
+                        followups_enviados = 0, whatsapp_config_id = %s,
+                        conversation_id = coalesce(conversation_id, %s), contact_id = coalesce(contact_id, %s)
+                    where id = %s""",
+                 (agora, agora, agora + FOLLOWUPS[0], conexao, r.conversation_id, r.contact_id, c["id"]))
+    return True
+
+
+def _falhou_primeira(conn, c, motivo, agora) -> None:
+    # Sem conversa no inbox não há como /passar (exige conversation_id): fica registrado para a pessoa ver.
+    log.warning("1ª mensagem da conversa LP %s não saiu: %s", c["id"], motivo)
+    _primeira(conn, c["id"], status="falhou", motivo=motivo[:500], em=agora.isoformat())
+    conn.execute("""update radar.conversas set estado = 'humano', motivo_fim = 'falha_primeira_mensagem'
+                    where id = %s""", (c["id"],))
+
+
 # ── conversador: IA responde e acompanha ─────────────────────────────────
 async def conversar(conn, comercial: Comercial, agora: datetime, cliente_ia=None, max_conversas: int = 20) -> int:
     """Trata conversas com estado 'ia' que têm mensagem nova ou acompanhamento vencido."""
@@ -225,6 +330,29 @@ def _historico(conn, c) -> list[tuple[str, str]]:
     return [("lead" if s == "customer" else "nos", t or "") for s, t in rows]
 
 
+def _pessoa(conn, c) -> dict:
+    """Com quem a IA fala: o lead do Radar ou, na LP, os dados do contexto (o worker não lê public.contacts)."""
+    if c["origem"] == "lp":
+        ctx = c["contexto"] or {}
+        return {"id": None, "status": "lp", "motivo_descarte": None, "whatsapp": ctx.get("telefone"),
+                "telefone": ctx.get("telefone"), "nome": ctx.get("nome") or ""}
+    return _cur(conn).execute("select * from radar.leads where id = %s", (c["lead_id"],)).fetchone()
+
+
+def _acao(intencao: str, resultado: "triagem.Resultado | None") -> str:
+    """O que fazer depois da resposta. Com critérios, a decisão sai da nota; a IA só sinaliza o que o lead
+    pediu explicitamente (pessoa, sem interesse) ou que não sabe seguir."""
+    if intencao == "pediu_humano":
+        return "pediu_humano"
+    if intencao == "nao_sei":
+        return "ia_sem_resposta"
+    if intencao == "sem_interesse":
+        return "sem_interesse"
+    if resultado is None:
+        return "qualificado" if intencao == "qualificado" else "seguir"
+    return {"passar": "qualificado", "descartar": "descartar"}.get(resultado.decisao, "seguir")
+
+
 async def _tratar(conn, comercial, c, agora, cliente_ia) -> None:
     novas = _novas(conn, c)
     ultima = max((m["created_at"] for m in novas), default=c["lida_ate"])
@@ -233,12 +361,14 @@ async def _tratar(conn, comercial, c, agora, cliente_ia) -> None:
         conn.execute("""update radar.conversas set estado = 'humano', motivo_fim = 'humano_assumiu',
                         assumida_em = %s, lida_ate = %s where id = %s""", (agora, ultima, c["id"]))
         return
-    lead = _cur(conn).execute("select * from radar.leads where id = %s", (c["lead_id"],)).fetchone()
+    lp = c["origem"] == "lp"
+    lead = _pessoa(conn, c)
     cfg_ag = _agencia(conn, c["agency_id"])
     do_lead = [m for m in novas if m["sender_type"] == "customer"]
 
     if do_lead:
-        conn.execute("update radar.leads set status = 'respondeu' where id = %s and status = 'contatado'", (lead["id"],))
+        if not lp:
+            conn.execute("update radar.leads set status = 'respondeu' where id = %s and status = 'contatado'", (lead["id"],))
         tarefa = "Responda às últimas mensagens do lead."
         if any((m["content_type"] or "text") != "text" and not m["content_text"] for m in do_lead):
             tarefa += " O lead mandou áudio ou mídia que você não consegue ver: peça com gentileza para escrever."
@@ -246,7 +376,8 @@ async def _tratar(conn, comercial, c, agora, cliente_ia) -> None:
         if c["followups_enviados"] >= MAX_FOLLOWUPS:
             conn.execute("""update radar.conversas set estado = 'encerrada', motivo_fim = 'sem_resposta',
                             proximo_followup_em = null where id = %s""", (c["id"],))
-            conn.execute("update radar.leads set sem_resposta = true where id = %s", (lead["id"],))
+            if not lp:
+                conn.execute("update radar.leads set sem_resposta = true where id = %s", (lead["id"],))
             return
         local = _agora_local(cfg_ag, agora)
         if not ((cfg_ag.get("janela_inicio") or JANELA_PADRAO[0]) <= local.time() < (cfg_ag.get("janela_fim") or JANELA_PADRAO[1])):
@@ -256,11 +387,14 @@ async def _tratar(conn, comercial, c, agora, cliente_ia) -> None:
         return
 
     cfg = ia.carregar_config(conn, c["agency_id"])
+    ficha = triagem.ficha_lp(c["contexto"]) if lp else _ficha(conn, lead)
     try:
-        resp, custo = await ia.responder(cfg, cfg_ag.get("nome_agencia") or "agência", _ficha(conn, lead),
-                                         _historico(conn, c), tarefa, cliente=cliente_ia)
+        ia.checar_orcamento(conn, cfg, c["agency_id"], agora)      # acima do teto o modelo nem é chamado
+        resp, custo = await ia.responder(cfg, cfg_ag.get("nome_agencia") or "agência", ficha,
+                                         _historico(conn, c), tarefa, cliente=cliente_ia, origem=c["origem"])
     except ia.IAIndisponivel as e:
-        await _passar(conn, comercial, c, lead, "ia_sem_resposta", None, str(e))
+        fim = "limite_custo" if isinstance(e, ia.LimiteCusto) else None
+        await _passar(conn, comercial, c, lead, "ia_sem_resposta", None, str(e), motivo_fim=fim)
         conn.execute("update radar.conversas set lida_ate = %s where id = %s", (ultima, c["id"]))
         return
     conn.execute("""insert into radar.custos_api (agency_id, fonte, operacao, lead_id, qtd, valor, estimado)
@@ -269,8 +403,24 @@ async def _tratar(conn, comercial, c, agora, cliente_ia) -> None:
     conn.execute("update radar.conversas set campos_coletados = %s::jsonb where id = %s",
                  (json.dumps(campos), c["id"]))
 
-    if resp.mensagem.strip():
-        trava = gate.checar(resp.mensagem, gate.Contexto(
+    # nota determinística, recalculada a cada resposta (só com critérios ativos para a agência/origem)
+    resultado = None
+    crit = triagem.carregar_criterios(conn, c["agency_id"], c["origem"])
+    if crit:
+        fatos = triagem.juntar_fatos((c["nota_detalhe"] or {}).get("fatos"), resp.fatos.model_dump())
+        resultado = triagem.calcular(crit, fatos, (c["contexto"] or {}).get("respostas") or [])
+        conn.execute("""update radar.conversas set nota = %s, nota_detalhe = %s::jsonb, decisao = %s,
+                        versao_criterios = %s where id = %s""",
+                     (resultado.nota, json.dumps(resultado.detalhe, default=str), resultado.decisao,
+                      crit.versao, c["id"]))
+    acao = _acao(resp.intencao, resultado)
+
+    mensagem = resp.mensagem
+    if resultado and acao in ("qualificado", "descartar"):
+        mensagem = triagem.mensagem(conn, c["agency_id"], c["origem"], "passar" if acao == "qualificado" else "descartar",
+                                    cfg_ag.get("nome_agencia") or "agência") or mensagem
+    if mensagem.strip():
+        trava = gate.checar(mensagem, gate.Contexto(
             lead_status=lead["status"], motivo_descarte=lead["motivo_descarte"], bloqueado=False,
             ultimo_contato_mesmo_canal=None, confirmado_recontato=True, disparo_confirmado=True,
             registrado_em_disparos_leads=True, agora_local_lead=_agora_local(cfg_ag, agora),
@@ -278,12 +428,13 @@ async def _tratar(conn, comercial, c, agora, cliente_ia) -> None:
             canal="whatsapp_nao_oficial", template_aprovado=False, primeira_mensagem=False))
         if not trava:
             await _passar(conn, comercial, c, lead, "ia_sem_resposta", campos,
-                          "a trava bloqueou a resposta da IA: " + "; ".join(trava.motivos))
+                          "a trava bloqueou a resposta da IA: " + "; ".join(trava.motivos), resultado=resultado)
             conn.execute("update radar.conversas set lida_ate = %s where id = %s", (ultima, c["id"]))
             return
         r = await comercial.enviar(agency_id=c["agency_id"], lead_id=lead["id"],
                                    whatsapp_config_id=c["whatsapp_config_id"], telefone=lead["whatsapp"] or lead["telefone"],
-                                   nome=lead["nome"], texto=resp.mensagem, primeira=False)
+                                   nome=lead["nome"], texto=mensagem, primeira=False,
+                                   **({"conversa_id": str(c["id"])} if lp else {}))
         if not r.ok:
             raise RuntimeError(f"envio falhou: {r.motivo}")
 
@@ -296,23 +447,41 @@ async def _tratar(conn, comercial, c, agora, cliente_ia) -> None:
         conn.execute("""update radar.conversas set followups_enviados = %s, proximo_followup_em = %s
                         where id = %s""", (n, prox, c["id"]))
 
-    if resp.intencao == "qualificado":
-        await _passar(conn, comercial, c, lead, "qualificado", campos, resp.resumo)
-    elif resp.intencao in ("pediu_humano", "nao_sei"):
-        await _passar(conn, comercial, c, lead, "pediu_humano" if resp.intencao == "pediu_humano" else "ia_sem_resposta",
-                      campos, resp.resumo)
-    elif resp.intencao == "sem_interesse":
+    if acao == "qualificado":
+        resumo = resp.resumo + (f" (nota da triagem: {resultado.nota}/100)" if resultado else "")
+        await _passar(conn, comercial, c, lead, "qualificado", campos, resumo, resultado=resultado)
+    elif acao in ("pediu_humano", "ia_sem_resposta"):
+        await _passar(conn, comercial, c, lead, acao, campos, resp.resumo, resultado=resultado)
+    elif acao == "descartar":
+        await _descartar(conn, comercial, c, lead, resultado)
+    elif acao == "sem_interesse":
         # vale só para este contato: a empresa decide se e quando reabordar (decisão do Philip, 20/10)
         conn.execute("""update radar.conversas set estado = 'encerrada', motivo_fim = 'sem_interesse',
                         proximo_followup_em = null where id = %s""", (c["id"],))
-        conn.execute("""update radar.leads set status = 'descartado', motivo_descarte = 'outro',
-                        motivo_descarte_texto = 'Sem interesse (respondeu à IA)' where id = %s""", (lead["id"],))
+        if not lp:
+            conn.execute("""update radar.leads set status = 'descartado', motivo_descarte = 'outro',
+                            motivo_descarte_texto = 'Sem interesse (respondeu à IA)' where id = %s""", (lead["id"],))
 
 
-async def _passar(conn, comercial, c, lead, motivo, campos, resumo) -> None:
+async def _passar(conn, comercial, c, lead, motivo, campos, resumo, motivo_fim=None, resultado=None) -> None:
+    if c["origem"] == "lp" and resultado is not None:
+        # LP: o COMERCIAL aceita os fatos dos critérios como campos (valores simples)
+        campos = {**(campos or {}), **{k: v for k, v in resultado.detalhe["fatos"].items() if v is not None}}
     await comercial.passar(agency_id=c["agency_id"], lead_id=lead["id"], conversation_id=c["conversation_id"],
                            motivo=motivo, campos=campos, resumo=resumo)
     conn.execute("""update radar.conversas set estado = 'humano', motivo_fim = %s, proximo_followup_em = null
-                    where id = %s""", (motivo, c["id"]))
-    if motivo == "qualificado":
+                    where id = %s""", (motivo_fim or motivo, c["id"]))
+    if motivo == "qualificado" and lead["id"]:
         conn.execute("update radar.leads set status = 'qualificado' where id = %s", (lead["id"],))
+
+
+async def _descartar(conn, comercial, c, lead, resultado) -> None:
+    """Nota abaixo do corte de descarte: encerra com motivo (LP: o COMERCIAL etiqueta "Fora do perfil")."""
+    motivo = f"Fora do perfil (nota {resultado.nota}/100, corte {resultado.detalhe['corte_descartar']})"
+    if c["origem"] == "lp":
+        await comercial.descartar(agency_id=c["agency_id"], conversa_id=str(c["id"]), motivo=motivo)
+    conn.execute("""update radar.conversas set estado = 'encerrada', motivo_fim = 'fora_do_perfil',
+                    proximo_followup_em = null where id = %s""", (c["id"],))
+    if lead["id"]:
+        conn.execute("""update radar.leads set status = 'descartado', motivo_descarte = 'outro',
+                        motivo_descarte_texto = %s where id = %s""", (motivo, lead["id"]))
