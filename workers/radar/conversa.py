@@ -216,6 +216,14 @@ def _primeira(conn, conversa_id, **estado) -> None:
 async def despachar_lp(conn, comercial: Comercial, agora: datetime, max_conversas: int = 20) -> int:
     """Conversas de LP abertas pelo webhook e ainda sem 1ª mensagem. Sem aprovação humana (contrato), mas com
     janela, limites da agência/conexão, intervalo mínimo e a trava de radar.gate."""
+    # 1ª mensagem que falhou e ainda não chegou ao funil: tenta de novo o /passar (o lead não se perde)
+    for c in _cur(conn).execute(
+            """select c.* from radar.conversas c
+               where c.origem = 'lp' and c.estado = 'ia' and c.iniciada_em is null
+                 and c.contexto->'primeira'->>'status' = 'falhou'
+                 and coalesce((c.contexto->'primeira'->>'repassar_em')::timestamptz, '-infinity') <= %s
+               order by c.id limit %s for update skip locked""", (agora, max_conversas)).fetchall():
+        await _passar_falha(conn, comercial, c, c["contexto"]["primeira"].get("motivo") or "erro_envio", agora)
     enviados = 0
     pendentes = _cur(conn).execute(
         """select c.* from radar.conversas c
@@ -262,7 +270,7 @@ async def _enviar_primeira_lp(conn, comercial, c, cfg, conexao, agora, local) ->
         janela_fim=cfg.get("janela_fim") or JANELA_PADRAO[1], canal="whatsapp_nao_oficial",
         template_aprovado=False, primeira_mensagem=True))
     if not trava:
-        _falhou_primeira(conn, c, "; ".join(trava.motivos), agora)
+        await _falhou_primeira(conn, comercial, c, "; ".join(trava.motivos), agora)
         return False
     # registro ANTES da tentativa (regra de arquitetura): se o processo cair aqui, não reenvia sozinho
     _primeira(conn, c["id"], status="enviando", em=agora.isoformat())
@@ -276,7 +284,7 @@ async def _enviar_primeira_lp(conn, comercial, c, cfg, conexao, agora, local) ->
                   agendado_para=(agora + timedelta(minutes=5)).isoformat())
         return False
     if not r.ok:
-        _falhou_primeira(conn, c, r.motivo or "erro_envio", agora)
+        await _falhou_primeira(conn, comercial, c, r.motivo or "erro_envio", agora)
         return False
     _primeira(conn, c["id"], status="enviado", em=agora.isoformat())
     conn.execute("""update radar.conversas set iniciada_em = %s, lida_ate = %s, proximo_followup_em = %s,
@@ -287,10 +295,25 @@ async def _enviar_primeira_lp(conn, comercial, c, cfg, conexao, agora, local) ->
     return True
 
 
-def _falhou_primeira(conn, c, motivo, agora) -> None:
-    # Sem conversa no inbox não há como /passar (exige conversation_id): fica registrado para a pessoa ver.
+async def _falhou_primeira(conn, comercial, c, motivo, agora) -> None:
     log.warning("1ª mensagem da conversa LP %s não saiu: %s", c["id"], motivo)
     _primeira(conn, c["id"], status="falhou", motivo=motivo[:500], em=agora.isoformat())
+    await _passar_falha(conn, comercial, c, motivo[:500], agora)
+
+
+async def _passar_falha(conn, comercial, c, motivo, agora) -> None:
+    """O lead vai ao funil como hoje (/passar sem conversa do inbox). Se o COMERCIAL não aceitar ou cair, a
+    conversa fica como está (estado 'ia', primeira 'falhou') e tenta de novo em 5 min."""
+    try:
+        r = await comercial.passar(agency_id=c["agency_id"], lead_id=None, conversation_id=None,
+                                   conversa_id=str(c["id"]), motivo="falha_primeira_mensagem", campos={}, resumo=motivo)
+        ok = bool((r or {}).get("ok"))
+    except Exception as e:                         # noqa: BLE001
+        log.warning("passar da conversa LP %s falhou (%s); tenta de novo em 5 min", c["id"], e)
+        ok = False
+    if not ok:
+        _primeira(conn, c["id"], repassar_em=(agora + timedelta(minutes=5)).isoformat())
+        return
     conn.execute("""update radar.conversas set estado = 'humano', motivo_fim = 'falha_primeira_mensagem'
                     where id = %s""", (c["id"],))
 

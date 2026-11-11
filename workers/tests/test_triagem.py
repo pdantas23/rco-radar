@@ -86,8 +86,8 @@ def test_fato_conhecido_nao_volta_a_ser_desconhecido():
 class FakeComercialLP:
     """Imita /enviar (LP por conversa_id: cria a conversa do inbox e grava em radar.conversas), /passar e /descartar."""
 
-    def __init__(self, conn, falha=None, erro_rede=False):
-        self.conn, self.falha, self.erro_rede = conn, falha, erro_rede
+    def __init__(self, conn, falha=None, erro_rede=False, passar_cai=False):
+        self.conn, self.falha, self.erro_rede, self.passar_cai = conn, falha, erro_rede, passar_cai
         self.envios, self.passagens, self.descartes = [], [], []
 
     async def enviar(self, *, agency_id, lead_id, whatsapp_config_id, telefone, nome, texto, primeira,
@@ -110,6 +110,8 @@ class FakeComercialLP:
 
     async def passar(self, **kw):
         self.passagens.append(kw)
+        if self.passar_cai:
+            raise RuntimeError("COMERCIAL /passar: HTTP 502")
         return {"ok": True}
 
     async def descartar(self, **kw):
@@ -186,6 +188,8 @@ async def test_lp_trava_bloqueia_numero_bloqueado(conn):
     c = conv(conn, cid)
     assert c["contexto"]["primeira"]["status"] == "falhou" and "bloqueado" in c["contexto"]["primeira"]["motivo"]
     assert (c["estado"], c["motivo_fim"]) == ("humano", "falha_primeira_mensagem")
+    p = com.passagens[-1]                                 # o lead vai ao funil como hoje
+    assert p["motivo"] == "falha_primeira_mensagem" and p["conversa_id"] == str(cid) and "bloqueado" in p["resumo"]
 
 
 async def test_lp_trava_bloqueia_texto_com_variavel_nao_preenchida(conn):
@@ -236,10 +240,53 @@ async def test_lp_erro_de_rede_volta_para_a_fila(conn):
 
 async def test_lp_numero_invalido_registra_falha(conn):
     [cid] = preparar_lp(conn)
-    await conversa.despachar(conn, FakeComercialLP(conn, falha="numero_invalido"), AGORA)
+    com = FakeComercialLP(conn, falha="numero_invalido")
+    await conversa.despachar(conn, com, AGORA)
     c = conv(conn, cid)
     assert c["contexto"]["primeira"]["status"] == "falhou" and c["contexto"]["primeira"]["motivo"] == "numero_invalido"
-    assert c["iniciada_em"] is None and c["estado"] == "humano"
+    assert c["iniciada_em"] is None and (c["estado"], c["motivo_fim"]) == ("humano", "falha_primeira_mensagem")
+    assert com.passagens == [{"agency_id": com.passagens[0]["agency_id"], "lead_id": None, "conversation_id": None,
+                              "conversa_id": str(cid), "motivo": "falha_primeira_mensagem", "campos": {},
+                              "resumo": "numero_invalido"}]
+
+
+async def test_lp_falha_e_passar_fora_do_ar_tenta_de_novo_sem_perder_o_lead(conn):
+    [cid] = preparar_lp(conn)
+    com = FakeComercialLP(conn, falha="numero_invalido", passar_cai=True)
+    await conversa.despachar(conn, com, AGORA)
+    c = conv(conn, cid)
+    assert c["estado"] == "ia" and c["contexto"]["primeira"]["status"] == "falhou"   # nada perdido
+    await conversa.despachar(conn, com, AGORA + timedelta(minutes=2))                # antes dos 5 min
+    assert len(com.passagens) == 1 and len(com.envios) == 1                          # nem reenvia a mensagem
+    com.passar_cai = False
+    await conversa.despachar(conn, com, AGORA + timedelta(minutes=6))
+    c = conv(conn, cid)
+    assert len(com.passagens) == 2 and len(com.envios) == 1
+    assert (c["estado"], c["motivo_fim"]) == ("humano", "falha_primeira_mensagem")
+    await conversa.despachar(conn, com, AGORA + timedelta(minutes=20))
+    assert len(com.passagens) == 2                                                   # não repassa de novo
+
+
+async def test_lp_telefone_null_nao_quebra_o_despacho(conn):
+    [cid] = preparar_lp(conn)
+    conn.execute("""update radar.conversas set contexto = contexto || '{"telefone": null, "nome": "Ana"}'::jsonb
+                    where id = %s""", (cid,))
+    conn.execute("insert into radar.bloqueios (agency_id, telefone, motivo) values (%s, '+5586999990000', 'pediu')", (AGENCIA,))
+    com = FakeComercialLP(conn)
+    assert await conversa.despachar(conn, com, AGORA) == 1
+    assert com.envios[0]["telefone"] is None and conv(conn, cid)["contexto"]["primeira"]["status"] == "enviado"
+
+
+async def test_lp_bloqueio_usa_o_telefone_do_contexto(conn):
+    [bloq, livre] = preparar_lp(conn, n=2)
+    for cid, tel in ((bloq, "+5586999990000"), (livre, "+5586988887777")):
+        conn.execute("""update radar.conversas set contexto = contexto || jsonb_build_object('telefone', %s::text, 'nome', 'X')
+                        where id = %s""", (tel, cid))
+    conn.execute("insert into radar.bloqueios (agency_id, telefone, motivo) values (%s, '+5586999990000', 'pediu')", (AGENCIA,))
+    com = FakeComercialLP(conn)
+    await conversa.despachar(conn, com, AGORA)
+    assert [e["conversa_id"] for e in com.envios] == [str(livre)] and com.envios[0]["telefone"] == "+5586988887777"
+    assert conv(conn, bloq)["contexto"]["primeira"]["status"] == "falhou"
 
 
 # ── banco: conversa de LP com nota ───────────────────────────────────────

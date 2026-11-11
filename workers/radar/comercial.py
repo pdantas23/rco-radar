@@ -66,10 +66,13 @@ class Comercial:
                               d.get("message_id"), d.get("motivo"))
 
     async def passar(self, *, agency_id, lead_id, conversation_id, motivo: str,
-                     campos: dict | None = None, resumo: str | None = None) -> dict:
-        return await self._post("/api/internal/radar/passar", {
-            "agency_id": agency_id, "lead_id": lead_id, "conversation_id": conversation_id,
-            "motivo": motivo, "campos": campos or {}, "resumo": resumo})
+                     campos: dict | None = None, resumo: str | None = None, conversa_id=None) -> dict:
+        """LP com 1ª mensagem falha: motivo 'falha_primeira_mensagem', conversation_id None e conversa_id."""
+        corpo = {"agency_id": agency_id, "lead_id": lead_id, "conversation_id": conversation_id,
+                 "motivo": motivo, "campos": campos or {}, "resumo": resumo}
+        if conversa_id is not None:
+            corpo["conversa_id"] = conversa_id
+        return await self._post("/api/internal/radar/passar", corpo)
 
     async def descartar(self, *, agency_id, conversa_id, motivo: str | None = None) -> dict:
         return await self._post("/api/internal/radar/descartar", {
