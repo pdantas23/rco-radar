@@ -29,8 +29,36 @@ from radar.comercial import Comercial
 
 log = logging.getLogger("radar.conversa")
 
-FOLLOWUPS = (timedelta(hours=24), timedelta(hours=48))   # 24h depois da 1ª e +48h (= 72h)
+# Padrão dos acompanhamentos: 24h depois da 1ª e +48h (= 72h); depois do último, mais 48h e encerra.
+# A agência troca em radar.config 'triagem_followups' = {"quantidade": n, "intervalos_horas": [...]}.
+FOLLOWUPS = (timedelta(hours=24), timedelta(hours=48))
 MAX_FOLLOWUPS = 2
+MAX_FOLLOWUPS_CONFIG = 5
+
+
+def followups(conn, agency_id) -> tuple[int, tuple[timedelta, ...]]:
+    """(quantidade, intervalos) da agência; padrão quando a chave falta ou é inválida (quantidade 0-5,
+    intervalos positivos, pelo menos um por acompanhamento)."""
+    row = conn.execute("select valor from radar.config where agency_id = %s and chave = 'triagem_followups'",
+                       (agency_id,)).fetchone()
+    v = row[0] if row else None
+    if isinstance(v, str):
+        try:
+            v = json.loads(v)
+        except ValueError:
+            v = None
+    if isinstance(v, dict):
+        q, horas = v.get("quantidade"), v.get("intervalos_horas")
+        num = lambda x: isinstance(x, (int, float)) and not isinstance(x, bool)   # noqa: E731
+        if (num(q) and int(q) == q and 0 <= q <= MAX_FOLLOWUPS_CONFIG and isinstance(horas, list)
+                and all(num(h) and h > 0 for h in horas) and len(horas) >= q):
+            return int(q), tuple(timedelta(hours=h) for h in horas) or FOLLOWUPS[:1]
+    return MAX_FOLLOWUPS, FOLLOWUPS
+
+
+def _espera(intervalos, i: int) -> timedelta:
+    """Espera antes do acompanhamento i+1 (i = quantos já saíram); depois do último, repete o último intervalo."""
+    return intervalos[min(i, len(intervalos) - 1)]
 JANELA_PADRAO = (time(8), time(20))
 
 
@@ -201,7 +229,8 @@ async def _enviar_primeira(conn, comercial, d, cfg, conexao, item, agora, local)
                  contact_id = excluded.contact_id, whatsapp_config_id = excluded.whatsapp_config_id,
                  iniciada_em = excluded.iniciada_em, lida_ate = excluded.lida_ate,
                  proximo_followup_em = excluded.proximo_followup_em, followups_enviados = 0, motivo_fim = null""",
-        (d["agency_id"], lead["id"], r.conversation_id, r.contact_id, conexao, agora, agora, agora + FOLLOWUPS[0]))
+        (d["agency_id"], lead["id"], r.conversation_id, r.contact_id, conexao, agora, agora,
+         agora + _espera(followups(conn, d["agency_id"])[1], 0)))
     return True
 
 
@@ -291,7 +320,8 @@ async def _enviar_primeira_lp(conn, comercial, c, cfg, conexao, agora, local) ->
                         followups_enviados = 0, whatsapp_config_id = %s,
                         conversation_id = coalesce(conversation_id, %s), contact_id = coalesce(contact_id, %s)
                     where id = %s""",
-                 (agora, agora, agora + FOLLOWUPS[0], conexao, r.conversation_id, r.contact_id, c["id"]))
+                 (agora, agora, agora + _espera(followups(conn, c["agency_id"])[1], 0), conexao, r.conversation_id,
+                  r.contact_id, c["id"]))
     return True
 
 
@@ -396,7 +426,7 @@ async def _tratar(conn, comercial, c, agora, cliente_ia) -> None:
         if any((m["content_type"] or "text") != "text" and not m["content_text"] for m in do_lead):
             tarefa += " O lead mandou áudio ou mídia que você não consegue ver: peça com gentileza para escrever."
     elif c["proximo_followup_em"] and c["proximo_followup_em"] <= agora:
-        if c["followups_enviados"] >= MAX_FOLLOWUPS:
+        if c["followups_enviados"] >= followups(conn, c["agency_id"])[0]:
             conn.execute("""update radar.conversas set estado = 'encerrada', motivo_fim = 'sem_resposta',
                             proximo_followup_em = null where id = %s""", (c["id"],))
             if not lp:
@@ -463,10 +493,11 @@ async def _tratar(conn, comercial, c, agora, cliente_ia) -> None:
 
     if do_lead:
         conn.execute("""update radar.conversas set lida_ate = %s, followups_enviados = 0,
-                        proximo_followup_em = %s where id = %s""", (ultima, agora + FOLLOWUPS[0], c["id"]))
+                        proximo_followup_em = %s where id = %s""",
+                     (ultima, agora + _espera(followups(conn, c["agency_id"])[1], 0), c["id"]))
     else:
         n = c["followups_enviados"] + 1
-        prox = agora + FOLLOWUPS[1]                 # depois do 2º acompanhamento, mais 48h e encerra
+        prox = agora + _espera(followups(conn, c["agency_id"])[1], n)   # depois do último: mesma espera e encerra
         conn.execute("""update radar.conversas set followups_enviados = %s, proximo_followup_em = %s
                         where id = %s""", (n, prox, c["id"]))
 

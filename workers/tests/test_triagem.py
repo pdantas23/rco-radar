@@ -500,3 +500,67 @@ async def test_comercial_serializa_uuid_e_manda_os_corpos_de_lp():
     assert recebidos[0][1]["lead_id"] is None and recebidos[0][1]["conversa_id"] == str(cv)
     assert recebidos[1] == ("/api/internal/radar/descartar",
                             {"agency_id": str(ag), "conversa_id": str(cv), "motivo": "Fora do perfil"})
+
+
+# ── config gravada pela tela do COMERCIAL (radar.config / criterios_triagem) ──
+def _config(conn, chave, valor):
+    conn.execute("""insert into radar.config (agency_id, chave, valor) values (%s, %s, %s::jsonb)
+                    on conflict (agency_id, chave) do update set valor = excluded.valor""", (AGENCIA, chave, json.dumps(valor)))
+
+
+@pytest.mark.parametrize("valor,esperado", [
+    (None, (2, (24, 48))),                                                      # chave ausente: padrão
+    ({"quantidade": 3, "intervalos_horas": [12, 24, 36]}, (3, (12, 24, 36))),
+    ({"quantidade": 0, "intervalos_horas": []}, (0, (24,))),
+    ({"quantidade": 1, "intervalos_horas": [6, 6, 6]}, (1, (6, 6, 6))),
+    ({"quantidade": 6, "intervalos_horas": [1] * 6}, (2, (24, 48))),            # acima de 5
+    ({"quantidade": -1, "intervalos_horas": [1]}, (2, (24, 48))),
+    ({"quantidade": 2, "intervalos_horas": [24]}, (2, (24, 48))),               # menos intervalos que acompanhamentos
+    ({"quantidade": 2, "intervalos_horas": [24, 0]}, (2, (24, 48))),            # intervalo não positivo
+    ({"quantidade": 2, "intervalos_horas": [24, "48"]}, (2, (24, 48))),
+    ({"quantidade": True, "intervalos_horas": [24]}, (2, (24, 48))),
+    ({"quantidade": 1.5, "intervalos_horas": [24, 48]}, (2, (24, 48))),
+    ("lixo", (2, (24, 48))),
+])
+def test_followups_da_config_e_validacao(conn, valor, esperado):
+    conn.execute("truncate radar.config")
+    if valor is not None:
+        _config(conn, "triagem_followups", valor)
+    q, intervalos = conversa.followups(conn, AGENCIA)
+    assert (q, tuple(i.total_seconds() / 3600 for i in intervalos)) == esperado
+
+
+async def test_lp_acompanhamentos_seguem_a_config_da_agencia(conn):
+    [cid] = preparar_lp(conn)                 # 13h UTC = 10h SP: tudo dentro da janela
+    _config(conn, "triagem_followups", {"quantidade": 1, "intervalos_horas": [3, 2]})
+    com = FakeComercialLP(conn)
+    await conversa.despachar(conn, com, AGORA)
+    assert conv(conn, cid)["proximo_followup_em"] == AGORA + timedelta(hours=3)
+    fake = FakeIA(resp_fatos("Oi! Conseguiu ver minha mensagem?"))
+    await conversa.conversar(conn, com, AGORA + timedelta(hours=2), cliente_ia=fake)
+    assert fake.chamadas == []                                              # ainda não venceu
+    await conversa.conversar(conn, com, AGORA + timedelta(hours=3, minutes=1), cliente_ia=fake)
+    c = conv(conn, cid)
+    assert c["followups_enviados"] == 1 and c["proximo_followup_em"] == AGORA + timedelta(hours=5, minutes=1)
+    await conversa.conversar(conn, com, AGORA + timedelta(hours=5, minutes=2), cliente_ia=fake)
+    c = conv(conn, cid)
+    assert (c["estado"], c["motivo_fim"]) == ("encerrada", "sem_resposta") and len(com.envios) == 2
+
+
+async def test_mensagens_e_criterios_como_a_tela_grava(conn):
+    [cid] = preparar_lp(conn, criterios=False)
+    # tela: vazio = texto padrão; preenchido = texto da agência
+    _config(conn, "triagem_mensagens", {"lp": {"inicial": "Oi! Aqui é da {agencia}.", "passar": "", "descartar": ""},
+                                        "radar": {"passar": "", "descartar": ""}})
+    # tela: salvar cria versão nova ativa e desativa a anterior (histórico mantido)
+    conn.execute("""insert into radar.criterios_triagem (agency_id, origem, versao, criterios, corte_passar, corte_descartar, ativo)
+                    values (%s, 'lp', 1, %s::jsonb, 10, 0, false), (%s, 'lp', 2, %s::jsonb, 70, 30, true)""",
+                 (AGENCIA, json.dumps(CRITERIOS), AGENCIA, json.dumps(CRITERIOS)))
+    com = FakeComercialLP(conn)
+    await conversa.despachar(conn, com, AGORA)
+    assert com.envios[0]["texto"] == "Oi! Aqui é da RCO HUB."
+    lead_lp_responde(conn, cid, "Sou a dona", AGORA + timedelta(minutes=2))
+    await conversa.conversar(conn, com, AGORA + timedelta(minutes=3), cliente_ia=FakeIA(resp_fatos(decisor="sim")))
+    c = conv(conn, cid)
+    assert (c["versao_criterios"], c["nota"], c["decisao"]) == (2, 20, "acompanhar")   # v1 (corte 10) teria passado
+    assert triagem.mensagem(conn, AGENCIA, "lp", "passar", "RCO HUB") == triagem.MENSAGENS_PADRAO["lp"]["passar"]
