@@ -1,4 +1,6 @@
-"""Triagem IA (docs/triagem-ia.md): conversa de LP, nota determinística, teto de custo e OpenRouter.
+"""Triagem IA (docs/triagem-ia.md): conversa de LP (1ª mensagem automática), teto de custo e OpenRouter.
+
+Portões, cadência, esteira e agenda da v2: tests/test_triagem_v2.py.
 
 Banco: Postgres real (RADAR_TEST_DSN) com a 008. COMERCIAL, Anthropic e OpenRouter simulados: nada pago.
 """
@@ -18,69 +20,6 @@ from tests.test_conversa import AGORA, CONEXAO, FakeIA, resposta
 MADRUGADA = datetime(2026, 10, 20, 6, 0, tzinfo=timezone.utc)          # 03:00 em São Paulo
 RESPOSTAS_LP = [{"pergunta": "Qual o seu segmento?", "resposta": "Clínica odontológica"},
                 {"pergunta": "Quanto investe em anúncios por mês?", "resposta": "Uns 2 mil"}]
-
-CRITERIOS = [  # o mesmo exemplo da migration 008
-    {"campo": "decisor", "peso": 20, "regra": {"tipo": "em", "valores": ["sim"]}},
-    {"campo": "faturamento_faixa", "peso": 25, "regra": {"tipo": "em", "valores": ["30k_80k", "80k_200k", "200k_500k", "acima_500k"]}},
-    {"campo": "investe_anuncio", "peso": 15, "regra": {"tipo": "em", "valores": ["sim"]}},
-    {"campo": "dor_clara", "peso": 20, "regra": {"tipo": "em", "valores": ["sim"]}},
-    {"campo": "urgencia", "peso": 10, "regra": {"tipo": "em", "valores": ["alta", "media"]}},
-    {"campo": "aceita_contato", "peso": 10, "regra": {"tipo": "em", "valores": ["sim"]}},
-]
-
-
-def crit(criterios=CRITERIOS, passar=70, descartar=30):
-    return triagem.Criterios(1, 1, criterios, passar, descartar, True)
-
-
-# ── nota e cortes (puro) ─────────────────────────────────────────────────
-def test_tudo_atendido_da_100_e_passa():
-    fatos = {"decisor": "sim", "faturamento_faixa": "80k_200k", "investe_anuncio": "sim", "dor_clara": "sim",
-             "urgencia": "alta", "aceita_contato": "sim"}
-    r = triagem.calcular(crit(), fatos, [])
-    assert (r.nota, r.teto, r.decisao) == (100, 100, "passar")
-    assert [i["pontos"] for i in r.detalhe["criterios"]] == [20, 25, 15, 20, 10, 10]
-
-
-@pytest.mark.parametrize("nota,teto,esperado", [
-    (70, 70, "passar"),          # exatamente no corte de passar
-    (69, 100, "acompanhar"),     # um ponto abaixo
-    (29, 30, "acompanhar"),      # teto exatamente no corte de descarte: ainda pode chegar lá
-    (29, 29, "descartar"),       # teto abaixo do corte
-    (0, 0, "descartar"),
-    (30, 30, "acompanhar"),      # nota final no meio: segue com acompanhamentos
-])
-def test_bordas_dos_cortes(nota, teto, esperado):
-    assert triagem.decidir(nota, teto, 70, 30) == esperado
-
-
-def test_fato_desconhecido_nao_descarta():
-    # só sabemos que NÃO é decisor e não investe: nota 0, mas o teto (65) ainda passa do corte de descarte
-    r = triagem.calcular(crit(), {"decisor": "nao", "investe_anuncio": "nao", "urgencia": "indefinido"}, [])
-    assert (r.nota, r.teto, r.decisao) == (0, 65, "acompanhar")
-    assert r.detalhe["criterios"][4]["atende"] is None                  # urgência ainda desconhecida
-
-
-def test_respostas_da_lp_contam_como_fato():
-    c = crit([{"campo": "resposta:investe em anuncios", "peso": 60, "regra": {"tipo": "contem", "valores": ["mil"]}},
-              {"campo": "resposta:segmento", "peso": 40, "regra": {"tipo": "preenchido"}}], passar=100, descartar=10)
-    r = triagem.calcular(c, {}, RESPOSTAS_LP)
-    assert (r.nota, r.decisao) == (100, "passar")                       # sem acento/maiúscula no trecho da pergunta
-
-
-def test_pesos_fora_de_100_sao_normalizados_e_regra_desconhecida_falha():
-    c = crit([{"campo": "decisor", "peso": 1, "regra": {"tipo": "em", "valores": ["sim"]}},
-              {"campo": "dor_clara", "peso": 1, "regra": {"tipo": "em", "valores": ["sim"]}}])
-    assert triagem.calcular(c, {"decisor": "sim", "dor_clara": "nao"}, []).nota == 50
-    with pytest.raises(ValueError):
-        triagem.calcular(crit([{"campo": "decisor", "peso": 100, "regra": {"tipo": "regex"}}]), {"decisor": "x"}, [])
-
-
-def test_fato_conhecido_nao_volta_a_ser_desconhecido():
-    assert triagem.juntar_fatos({"decisor": "sim", "urgencia": "baixa"},
-                                {"decisor": "indefinido", "urgencia": "alta", "dor_clara": None}) == \
-        {"decisor": "sim", "urgencia": "alta"}
-
 
 # ── banco: conversa de LP ────────────────────────────────────────────────
 class FakeComercialLP:
@@ -119,7 +58,7 @@ class FakeComercialLP:
         return {"ok": True, "etiquetado": True}
 
 
-def preparar_lp(conn, n=1, criterios=True, limite_hora=20, intervalo=0, telefone=None, ia_ligada=True,
+def preparar_lp(conn, n=1, limite_hora=20, intervalo=0, telefone=None, ia_ligada=True,
                 provedor=None, limite_usd=None):
     conn.execute("""truncate radar.disparos_leads, radar.disparos, radar.abordagens, radar.conversas, radar.bloqueios,
                     radar.criterios_triagem, radar.custos_api, radar.config cascade""")
@@ -130,9 +69,6 @@ def preparar_lp(conn, n=1, criterios=True, limite_hora=20, intervalo=0, telefone
                  (CONEXAO, CONTA_MESTRE))
     conn.execute("""update radar.agencias set whatsapp_config_id = %s, limite_hora = %s, intervalo_min_seg = %s,
                     intervalo_max_seg = %s where agency_id = %s""", (CONEXAO, limite_hora, intervalo, intervalo, AGENCIA))
-    if criterios:
-        conn.execute("""insert into radar.criterios_triagem (agency_id, origem, criterios, corte_passar, corte_descartar, exemplo)
-                        values (%s, 'lp', %s::jsonb, 70, 30, true)""", (AGENCIA, json.dumps(CRITERIOS)))
     ids = []
     for i in range(n):
         contato = conn.execute("insert into public.contacts default values returning id").fetchone()[0]
@@ -167,7 +103,9 @@ async def test_lp_primeira_mensagem_automatica_dentro_da_janela(conn):
     assert e["idempotency_key"] == f"radar-lp-{cid}" and "RCO HUB" in e["texto"]
     c = conv(conn, cid)
     assert c["iniciada_em"] == AGORA and c["conversation_id"] is not None
-    assert c["proximo_followup_em"] == AGORA + timedelta(hours=24) and c["contexto"]["primeira"]["status"] == "enviado"
+    # v2: toque 2 da cadência em +2 h (terça 12h em SP, dentro da janela seg-sex 9h-18h)
+    assert c["proximo_followup_em"] == AGORA + timedelta(hours=2) and c["cadencia_inicio"] == AGORA
+    assert c["contexto"]["primeira"]["status"] == "enviado"
     assert await conversa.despachar(conn, com, AGORA + timedelta(minutes=5)) == 0   # não repete
 
 
@@ -313,52 +251,9 @@ async def test_lp_ia_recebe_as_respostas_da_lp_e_prompt_de_lp(conn):
     fake = FakeIA(resp_fatos())
     await conversa.conversar(conn, com, AGORA + timedelta(minutes=3), cliente_ia=fake)
     chamada = fake.chamadas[0]
-    assert "landing page" in chamada["system"] and "NÃO pergunte de novo" in chamada["system"]
+    assert "landing page" in chamada["system"] and "NÃO se pergunta de novo" in chamada["system"]
     primeira = chamada["messages"][0]["content"]
     assert "Clínica odontológica" in primeira and "Quanto investe em anúncios por mês?: Uns 2 mil" in primeira
-
-
-async def test_lp_nota_recalculada_a_cada_resposta_e_passa(conn):
-    cid, com = await _lp_contatada(conn)
-    t = AGORA + timedelta(minutes=2)
-    lead_lp_responde(conn, cid, "Sou a dona, faturo uns 100 mil", t)
-    fake = FakeIA(resp_fatos(decisor="sim", faturamento_faixa="80k_200k"),
-                  resp_fatos("Perfeito!", "continuar", investe_anuncio="sim", dor_clara="sim"))
-    await conversa.conversar(conn, com, t + timedelta(seconds=5), cliente_ia=fake)
-    c = conv(conn, cid)
-    assert (c["nota"], c["decisao"], c["estado"], c["versao_criterios"]) == (45, "acompanhar", "ia", 1)
-    assert c["nota_detalhe"]["fatos"] == {"decisor": "sim", "faturamento_faixa": "80k_200k"}
-    assert com.envios[-1]["texto"] == "E hoje vocês investem em anúncio?" and com.envios[-1]["conversa_id"] == str(cid)
-
-    lead_lp_responde(conn, cid, "Invisto sim, quero mais pacientes", t + timedelta(minutes=5))
-    await conversa.conversar(conn, com, t + timedelta(minutes=6), cliente_ia=fake)
-    c = conv(conn, cid)
-    assert (c["nota"], c["decisao"], c["estado"], c["motivo_fim"]) == (80, "passar", "humano", "qualificado")
-    p = com.passagens[-1]
-    assert p["lead_id"] is None and p["conversation_id"] == c["conversation_id"] and p["motivo"] == "qualificado"
-    assert p["campos"]["decisor"] == "sim" and "80/100" in p["resumo"]
-    assert com.envios[-1]["texto"] == triagem.MENSAGENS_PADRAO["lp"]["passar"]   # texto de passagem da config
-
-
-async def test_lp_descarta_pela_nota(conn):
-    cid, com = await _lp_contatada(conn)
-    lead_lp_responde(conn, cid, "Sou funcionário, a loja fatura 10 mil, não anuncia, sem pressa", AGORA + timedelta(minutes=2))
-    await conversa.conversar(conn, com, AGORA + timedelta(minutes=3), cliente_ia=FakeIA(resp_fatos(
-        decisor="nao", faturamento_faixa="ate_30k", investe_anuncio="nao", urgencia="baixa", dor_clara="nao")))
-    c = conv(conn, cid)                                   # nota 0, teto 10 (< 30)
-    assert (c["nota"], c["decisao"], c["estado"], c["motivo_fim"]) == (0, "descartar", "encerrada", "fora_do_perfil")
-    assert [{**d, "agency_id": str(d["agency_id"])} for d in com.descartes] == \
-        [{"agency_id": AGENCIA, "conversa_id": str(cid), "motivo": "Fora do perfil (nota 0/100, corte 30)"}]
-    assert com.passagens == [] and com.envios[-1]["texto"] == triagem.MENSAGENS_PADRAO["lp"]["descartar"]
-
-
-async def test_ia_dizer_qualificado_nao_passa_sem_nota(conn):
-    cid, com = await _lp_contatada(conn)
-    lead_lp_responde(conn, cid, "Sou o dono", AGORA + timedelta(minutes=2))
-    await conversa.conversar(conn, com, AGORA + timedelta(minutes=3),
-                             cliente_ia=FakeIA(resp_fatos("Ótimo!", "qualificado", decisor="sim")))
-    c = conv(conn, cid)
-    assert (c["nota"], c["decisao"], c["estado"]) == (20, "acompanhar", "ia") and com.passagens == []
 
 
 async def test_lp_humano_assume(conn):
@@ -377,20 +272,6 @@ async def test_lp_pediu_humano_passa_mesmo_com_nota_baixa(conn):
     await conversa.conversar(conn, com, AGORA + timedelta(minutes=3),
                              cliente_ia=FakeIA(resp_fatos("Claro, já chamo alguém!", "pediu_humano")))
     assert com.passagens[-1]["motivo"] == "pediu_humano" and conv(conn, cid)["estado"] == "humano"
-
-
-async def test_radar_com_criterios_descarta_lead_sem_rota_de_lp(conn):
-    from tests.test_conversa import _contatar, lead_responde
-    leads, com = await _contatar(conn)
-    conn.execute("""insert into radar.criterios_triagem (agency_id, origem, criterios, corte_passar, corte_descartar)
-                    values (%s, 'radar', %s::jsonb, 70, 30)""", (AGENCIA, json.dumps(CRITERIOS)))
-    lead_responde(conn, leads[0], "Não sou o dono e não anunciamos", AGORA + timedelta(minutes=2))
-    await conversa.conversar(conn, com, AGORA + timedelta(minutes=3), cliente_ia=FakeIA(resp_fatos(
-        decisor="nao", faturamento_faixa="ate_30k", investe_anuncio="nao", urgencia="baixa", dor_clara="nao")))
-    assert conn.execute("select estado, motivo_fim, decisao from radar.conversas").fetchone() == \
-        ("encerrada", "fora_do_perfil", "descartar")
-    st, txt = conn.execute("select status, motivo_descarte_texto from radar.leads where id = %s", (leads[0],)).fetchone()
-    assert st == "descartado" and "Fora do perfil" in txt
 
 
 # ── teto de custo ────────────────────────────────────────────────────────
@@ -422,7 +303,7 @@ def _openrouter_fake(status=200, custo=0.0021, corpo=None):
         chamadas.append(req)
         if status != 200:
             return httpx.Response(status, json={"error": {"message": "sem créditos"}})
-        conteudo = corpo or resp_fatos("Legal! Vocês investem em anúncio?", decisor="sim").model_dump_json()
+        conteudo = corpo or resp_fatos("Legal! Vocês investem em anúncio?", decisor="dono_socio").model_dump_json()
         uso = {"prompt_tokens": 1000, "completion_tokens": 100}
         if custo is not None:
             uso["cost"] = custo
@@ -447,8 +328,10 @@ async def test_openrouter_escolhido_pela_config_do_agente(conn, monkeypatch):
     assert corpo["model"] == "openai/gpt-5.6-luna" and corpo["messages"][0]["role"] == "system"
     schema = corpo["response_format"]["json_schema"]
     assert schema["strict"] is True and schema["schema"]["additionalProperties"] is False
-    assert set(schema["schema"]["required"]) == {"mensagem", "campos", "fatos", "intencao", "resumo"}
-    assert com.envios[-1]["texto"] == "Legal! Vocês investem em anúncio?" and conv(conn, cid)["nota"] == 20
+    assert set(schema["schema"]["required"]) == {"mensagem", "campos", "fatos", "intencao", "resumo", "escolha_horario"}
+    c = conv(conn, cid)
+    assert com.envios[-1]["texto"] == "Legal! Vocês investem em anúncio?" and c["decisao"] == "em_andamento"
+    assert c["nota_detalhe"]["fatos"]["decisor"] == "dono_socio"
     valor = conn.execute("select valor from radar.custos_api where fonte = 'ia_radar'").fetchone()[0]
     assert float(valor) == pytest.approx(0.0021 * ia.DOLAR)             # custo informado pela OpenRouter
 
@@ -528,39 +411,3 @@ def test_followups_da_config_e_validacao(conn, valor, esperado):
         _config(conn, "triagem_followups", valor)
     q, intervalos = conversa.followups(conn, AGENCIA)
     assert (q, tuple(i.total_seconds() / 3600 for i in intervalos)) == esperado
-
-
-async def test_lp_acompanhamentos_seguem_a_config_da_agencia(conn):
-    [cid] = preparar_lp(conn)                 # 13h UTC = 10h SP: tudo dentro da janela
-    _config(conn, "triagem_followups", {"quantidade": 1, "intervalos_horas": [3, 2]})
-    com = FakeComercialLP(conn)
-    await conversa.despachar(conn, com, AGORA)
-    assert conv(conn, cid)["proximo_followup_em"] == AGORA + timedelta(hours=3)
-    fake = FakeIA(resp_fatos("Oi! Conseguiu ver minha mensagem?"))
-    await conversa.conversar(conn, com, AGORA + timedelta(hours=2), cliente_ia=fake)
-    assert fake.chamadas == []                                              # ainda não venceu
-    await conversa.conversar(conn, com, AGORA + timedelta(hours=3, minutes=1), cliente_ia=fake)
-    c = conv(conn, cid)
-    assert c["followups_enviados"] == 1 and c["proximo_followup_em"] == AGORA + timedelta(hours=5, minutes=1)
-    await conversa.conversar(conn, com, AGORA + timedelta(hours=5, minutes=2), cliente_ia=fake)
-    c = conv(conn, cid)
-    assert (c["estado"], c["motivo_fim"]) == ("encerrada", "sem_resposta") and len(com.envios) == 2
-
-
-async def test_mensagens_e_criterios_como_a_tela_grava(conn):
-    [cid] = preparar_lp(conn, criterios=False)
-    # tela: vazio = texto padrão; preenchido = texto da agência
-    _config(conn, "triagem_mensagens", {"lp": {"inicial": "Oi! Aqui é da {agencia}.", "passar": "", "descartar": ""},
-                                        "radar": {"passar": "", "descartar": ""}})
-    # tela: salvar cria versão nova ativa e desativa a anterior (histórico mantido)
-    conn.execute("""insert into radar.criterios_triagem (agency_id, origem, versao, criterios, corte_passar, corte_descartar, ativo)
-                    values (%s, 'lp', 1, %s::jsonb, 10, 0, false), (%s, 'lp', 2, %s::jsonb, 70, 30, true)""",
-                 (AGENCIA, json.dumps(CRITERIOS), AGENCIA, json.dumps(CRITERIOS)))
-    com = FakeComercialLP(conn)
-    await conversa.despachar(conn, com, AGORA)
-    assert com.envios[0]["texto"] == "Oi! Aqui é da RCO HUB."
-    lead_lp_responde(conn, cid, "Sou a dona", AGORA + timedelta(minutes=2))
-    await conversa.conversar(conn, com, AGORA + timedelta(minutes=3), cliente_ia=FakeIA(resp_fatos(decisor="sim")))
-    c = conv(conn, cid)
-    assert (c["versao_criterios"], c["nota"], c["decisao"]) == (2, 20, "acompanhar")   # v1 (corte 10) teria passado
-    assert triagem.mensagem(conn, AGENCIA, "lp", "passar", "RCO HUB") == triagem.MENSAGENS_PADRAO["lp"]["passar"]

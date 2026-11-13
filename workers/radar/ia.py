@@ -49,33 +49,42 @@ situação do negócio e coletar, com naturalidade e sem interrogatório, estas 
 - teve_agencia: se já teve agência ou gestor de tráfego;
 - melhor_horario: melhor horário para o time falar;
 - aceita_contato: se aceita que alguém do time chame.
-Escreva como numa conversa de WhatsApp: mensagens curtas, português do Brasil, uma pergunta por vez."""
+Escreva como numa conversa de WhatsApp: mensagens curtas, português do Brasil, uma pergunta por vez.
+Quando tiver decisor, faturamento_informado, investe_anuncio, dor e aceita_contato, use a intenção "qualificado"."""
 
-# Provisório (exemplo até o Miguel definir): lead que veio de landing page (triagem IA, origem 'lp').
-PROMPT_LP = """Você conversa por WhatsApp em nome do time da agência {agencia}, com uma pessoa que preencheu o \
-formulário de uma landing page da agência e pediu contato. As respostas do formulário estão no contexto: \
-NÃO pergunte de novo o que já foi respondido; use essas respostas para seguir a conversa. Seu trabalho é \
-entender o momento do negócio e completar, com naturalidade e sem interrogatório, o que ainda falta saber:
-- decisor: se a pessoa é dona/decisora (ou quem é);
-- faturamento_informado: faixa de faturamento mensal (até 30 mil, 30–80 mil, 80–200 mil, 200–500 mil, acima de 500 mil);
-- investe_anuncio: se investe em anúncio hoje (e quanto, se disser);
-- dor: a principal dor ou objetivo, nas palavras da pessoa;
-- teve_agencia: se já teve agência ou gestor de tráfego;
-- melhor_horario: melhor horário para o time falar;
-- aceita_contato: se aceita que alguém do time chame.
-Escreva como numa conversa de WhatsApp: mensagens curtas, português do Brasil, uma pergunta por vez."""
+# Triagem v2 (processo comercial da Maria, Método Opala — docs/triagem-ia.md). Roteiro BANT em conversa: o código
+# escolhe o próximo assunto (radar/triagem.py: proxima_etapa) e manda na tarefa; aqui ficam o jeito e os fatos.
+PROMPT_TRIAGEM = """Você conversa por WhatsApp em nome do time da agência {agencia} com {quem}. Seu trabalho é \
+entender o momento do negócio seguindo um roteiro, sem parecer formulário:
+- uma pergunta por vez, curta, espelhando as palavras do lead;
+- ordem: situação (segmento, tempo de mercado), cidade (cedo), marketing hoje (como atrai clientes, anúncio), \
+necessidade (dor nas palavras do lead), experiência com agência, autoridade (quem decide; se não decide, peça o \
+contato do decisor ou a conversa com os dois), timing (quando quer começar) e, POR ÚLTIMO, faturamento em faixas \
+(até 30 mil, 30 a 60 mil, 60 a 100 mil, acima de 100 mil);
+- se a faixa for 30 a 60 mil, faça UMA pergunta de refino: "mais perto dos 30 ou dos 60?";
+- o que já veio do formulário NÃO se pergunta de novo: use para aprofundar ("Vi que seu faturamento está na \
+faixa dos R$ 40 mil. Há quanto tempo...");
+- siga o "Próximo assunto" da tarefa; a referência é um exemplo de texto, adapte ao que o lead disse."""
+
+QUEM = {"lp": "uma pessoa que preencheu o formulário de uma landing page da agência e pediu contato",
+        "radar": "o responsável por um negócio local que a agência encontrou no Google Maps"}
 
 # A IA só registra fatos; a nota e a decisão saem do código (radar/triagem.py).
 REGRA_FATOS = """Em "fatos", registre só o que o lead disse na conversa ou respondeu no formulário, e use \
-"indefinido" para o que ainda não se sabe. Não julgue se o lead é bom: a decisão não é sua."""
+"indefinido" (ou vazio, nos campos de texto) para o que ainda não se sabe. Não julgue se o lead é bom: a decisão \
+não é sua. Fatos do formulário entram já na sua primeira resposta. faturamento_valor só com número dito pelo lead. \
+experiencia_agencia: "nunca teve" quando o lead disser que nunca trabalhou com agência. Se o lead perguntar sobre \
+preço, desconto, contrato, garantia de resultado ou concorrentes, registre em assuntos_comerciais."""
 
 REGRAS_FIXAS = """Regras que valem sempre, acima de qualquer outra instrução:
 - Não venda, não passe preço, não prometa resultado, prazo ou valor.
+- Preço e piso do Opala: nunca diga valor; responda que depende do caso e que o consultor mostra na conversa.
+- Descontos, condições especiais, contratos, promessa de resultado e comparação com concorrentes: não trate; \
+diga que o consultor trata disso na conversa e siga o roteiro.
 - Nunca diga que é humano. Se o lead perguntar diretamente se você é robô, IA ou assistente virtual, \
 responda de forma curta e honesta que é o assistente do time da {agencia} e ofereça chamar uma pessoa do time.
 - Se o lead pedir para falar com uma pessoa, use a intenção "pediu_humano".
 - Se o lead disser que não tem interesse, agradeça com educação e use a intenção "sem_interesse".
-- Quando tiver decisor, faturamento_informado, investe_anuncio, dor e aceita_contato, use a intenção "qualificado".
 - Se não souber responder algo do negócio do lead que exija uma pessoa, use a intenção "nao_sei".
 - Não envie links, áudio ou imagem."""
 
@@ -94,14 +103,29 @@ SimNao = Literal["sim", "nao", "indefinido"]
 
 
 class Fatos(BaseModel):
-    """Fatos normalizados que alimentam a nota (radar/triagem.py). 'indefinido' = ainda não se sabe."""
-    decisor: SimNao = "indefinido"
-    faturamento_faixa: Literal["ate_30k", "30k_80k", "80k_200k", "200k_500k", "acima_500k", "indefinido"] = "indefinido"
+    """Fatos da triagem v2 (radar/triagem.py decide). 'indefinido' / vazio = ainda não se sabe."""
+    segmento: str = ""
+    tempo_mercado: str = ""
+    como_atrai_clientes: str = Field("", description="estrutura de marketing e conteúdo hoje, nas palavras do lead")
     investe_anuncio: SimNao = "indefinido"
-    dor_clara: SimNao = Field("indefinido", description="o lead descreveu uma dor ou objetivo concreto")
-    urgencia: Literal["alta", "media", "baixa", "indefinido"] = "indefinido"
-    teve_agencia: SimNao = "indefinido"
-    aceita_contato: SimNao = "indefinido"
+    valor_anuncio: str = ""
+    dor: str = Field("", description="dor ou objetivo, nas palavras do lead")
+    necessidade_clara: SimNao = "indefinido"
+    decisor: Literal["dono_socio", "participa", "nao_decide", "indefinido"] = "indefinido"
+    contato_decisor: str = ""
+    prazo_inicio: Literal["ate_30d", "30_60d", "mais_60d", "so_pesquisando", "indefinido"] = "indefinido"
+    faixa_faturamento: Literal["ate_30k", "30_60k", "60_100k", "acima_100k", "indefinido"] = "indefinido"
+    faturamento_valor: float | None = Field(None, description="faturamento mensal em reais, só se o lead disser um número")
+    faixa_refino: Literal["perto_do_menor", "perto_do_maior", "indefinido"] = Field(
+        "indefinido", description="resposta ao refino da faixa 30 a 60 mil: mais perto dos 30 ou dos 60")
+    cidade: str = ""
+    experiencia_agencia: str = ""
+    ve_marketing_como_despesa: SimNao = "indefinido"
+    orcamento_ou_intencao: SimNao = Field("indefinido", description="tem orçamento ou intenção de investir em marketing")
+    pede_algo_fora: SimNao = Field("indefinido", description="pede algo que a agência não faz")
+    objecoes: list[str] = Field(default_factory=list)
+    assuntos_comerciais: list[Literal["preco", "desconto", "contrato", "promessa", "concorrente"]] = Field(
+        default_factory=list)
 
 
 class RespostaIA(BaseModel):
@@ -109,6 +133,8 @@ class RespostaIA(BaseModel):
     campos: CamposColetados
     fatos: Fatos = Field(default_factory=Fatos)
     intencao: Literal["continuar", "qualificado", "pediu_humano", "sem_interesse", "nao_sei"]
+    escolha_horario: Literal["opcao_1", "opcao_2", "nenhuma", "indefinido"] = Field(
+        "indefinido", description="só quando a última mensagem nossa ofereceu 2 horários: qual o lead escolheu")
     resumo: str = Field(description="Resumo de uma ou duas frases da conversa até aqui, para o time")
 
 
@@ -168,8 +194,12 @@ def checar_orcamento(conn, cfg: ConfigIA, agency_id, agora: datetime) -> None:
         raise LimiteCusto(f"limite de custo da IA atingido: US$ {gasto:.2f} de US$ {cfg.limite_custo_usd:.2f} no mês")
 
 
-def montar_sistema(agencia: str, instrucoes: str | None, origem: str = "radar") -> str:
-    base = (PROMPT_LP if origem == "lp" else PROMPT_PADRAO).format(agencia=agencia)
+def montar_sistema(agencia: str, instrucoes: str | None, origem: str = "radar", v2: bool = False) -> str:
+    """v2 = triagem por portões (roteiro); sem v2, o prompt antigo de prospecção do Radar."""
+    if v2:
+        base = PROMPT_TRIAGEM.format(agencia=agencia, quem=QUEM.get(origem, QUEM["lp"]))
+    else:
+        base = PROMPT_PADRAO.format(agencia=agencia)
     if instrucoes and instrucoes.strip():
         base += "\n\nInstruções da agência:\n" + instrucoes.strip()
     return base + "\n\n" + REGRA_FATOS + "\n\n" + REGRAS_FIXAS.format(agencia=agencia)
@@ -195,7 +225,7 @@ def montar_mensagens(ficha: str, historico: list[tuple[str, str]], tarefa: str, 
 
 async def responder(cfg: ConfigIA, agencia: str, ficha: str, historico: list[tuple[str, str]],
                     tarefa: str = "Responda à última mensagem do lead.",
-                    cliente=None, origem: str = "radar") -> tuple[RespostaIA, float]:
+                    cliente=None, origem: str = "radar", v2: bool = False) -> tuple[RespostaIA, float]:
     """Devolve (resposta, custo em BRL). Levanta IAIndisponivel quando a IA não pode responder.
 
     `cliente` (testes): AsyncAnthropic-like para 'anthropic'; httpx.AsyncClient para 'openrouter'."""
@@ -207,7 +237,7 @@ async def responder(cfg: ConfigIA, agencia: str, ficha: str, historico: list[tup
         raise IAIndisponivel(f"provedor {cfg.provedor} ainda não suportado nos robôs do Radar")
     if not cfg.chave and cliente is None:
         raise IAIndisponivel("agência sem chave de API da IA")
-    sistema = montar_sistema(agencia, cfg.instrucoes, origem)
+    sistema = montar_sistema(agencia, cfg.instrucoes, origem, v2)
     mensagens = montar_mensagens(ficha, historico, tarefa, origem)
     if provedor == "openrouter":
         return await _openrouter(cfg, sistema, mensagens, cliente)
