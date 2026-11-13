@@ -208,3 +208,54 @@ worker; o COMERCIAL só o grava. `radar.conversas.nota_detalhe` (v2) =
 `{versao: 2, classificacao, justificativa, portoes: [{portao, status: ok|alerta|falha|esteira|pendente, valor, motivo}], fatos}`;
 `decisao` passa a aceitar `passa_direto | passa_alerta | esteira | desqualifica | redireciona | em_andamento`
 (migration 009 do Radar). `/descartar` (desqualifica de LP) recebe em `motivo` a justificativa.
+
+### Worker v2 — o que foi implementado e escolhas onde o texto era ambíguo (13/11)
+Código: `workers/radar/triagem.py` (portões, roteiro, cadência, resumo), `conversa.py` (fluxo), `ia.py` (fatos/prompt).
+Migration `009_triagem_v2.sql` (só arquivo): `etapa`, `cadencia_inicio`, `esteira_desde`, `esteira_enviados`,
+`agenda` em `radar.conversas` e o CHECK de `decisao` com as saídas novas.
+
+Config por agência em `radar.config` (chave ausente/valor inválido = padrão):
+- `triagem_regras`: `{origens: ["lp"], faturamento: {passa_min: 60000, alerta_min: 50000},
+  cidades: {opala: ["Teresina"], proximas: ["Timon"]}, timing: {passa: [...], esteira: [...]},
+  trafego_isolado_porte_min: null}`;
+- `triagem_cadencia`: `{toques: [{apos_horas: 0, tipo: "inicial"}, {2, "retoma"}, {24, "pergunta_facil"},
+  {72, "valor"}, {168, "fechamento"}], encerrar_apos_horas: 48, janela: {dias: [0..4], inicio: "09:00",
+  fim: "18:00"}, esteira: {intervalo_dias: 30, mensagens: 3, espera_final_dias: 7}, tipos: {<tipo>: instrução}}`;
+- `triagem_roteiro`: `{<etapa>: texto de referência}` (situacao, cidade, marketing, necessidade,
+  experiencia_agencia, autoridade, contato_decisor, timing, faturamento, refino);
+- `triagem_mensagens`: textos fixos `inicial`, `passar`, `descartar`, `oferta`, `oferta_nova`, `confirmacao`, `esteira`.
+Todos os textos padrão são EXEMPLO até a Maria/Miguel fecharem os scripts.
+
+Escolhas (revisar com o Philip):
+1. **Onde vale a v2**: `triagem_regras.origens`, padrão só `lp`. Leads do Radar (prospecção fria) seguem o fluxo
+   antigo (intenção da IA + `triagem_followups`) até a agência incluir `radar`.
+2. **`radar.criterios_triagem` (008) não é mais lido** pelo worker; a aba "Triagem IA" do COMERCIAL (93ffa99), que
+   edita critérios e pesos, fica sem efeito até ser trocada por regras/textos da v2.
+3. **Mais de um alerta**: o contrato diz "exatamente um portão em alerta". Com 2+ alertas o lead também passa com
+   alerta (todos no resumo), em vez de desqualificar — o SDR decide.
+4. **Cidade "outras"** é alerta (lista de portões), nunca falha; **redireciona** só quando o único portão em falha é o
+   porte (faturamento < 50 mil), em qualquer cidade (tráfego isolado é nacional), mesmo com timing > 60 d.
+5. **Necessidade = não** decide como desqualifica só quando os demais fatos são conhecidos (não é eliminatório);
+   eliminatórios (despesa, sem orçamento nem intenção, pede algo fora) decidem na hora.
+6. **Decisor indefinido / não decisor sem contato** só seguram a decisão enquanto falta outro fato; no fim viram alerta.
+7. **"Sem orçamento nem intenção"** virou o fato `orcamento_ou_intencao` (sim/nao/indefinido); o refino da faixa
+   30-60k virou `faixa_refino` (perto_do_menor/perto_do_maior); `assuntos_comerciais` registra o que o lead perguntou
+   de preço/desconto/contrato/promessa/concorrente (vai ao resumo do SDR).
+8. **Cadência**: horas contadas a partir do toque 1 (D0, +2 h, +1 d, +3 d, +7 d), sem encurtar o espaço entre dois toques
+   quando um foi empurrado pela janela. Toda mensagem nossa depois de uma resposta do lead é um novo toque 1. Depois do
+   5º toque espera 48 h (`encerrar_apos_horas`) e então esteira (porte conhecido e ok/alerta, sem falha) ou encerra.
+   O toque 1 da LP também só sai seg-sex 9h-18h (além da janela antiga da agência).
+9. **Esteira**: mensagens em 30, 60 e 90 dias; depois da 3ª, espera 7 dias (`espera_final_dias`) por resposta e
+   encerra com `motivo_fim = 'sem_resposta'` (sem chamada ao COMERCIAL, como o fim de acompanhamento de hoje).
+   Se o lead responde, volta a `qualificando` e o prazo antigo (> 60 d) é perguntado de novo.
+10. **Oferta de horários**: o texto da oferta sai de template (`oferta`, com os 2 rótulos exatos devolvidos pelo
+    COMERCIAL), não de texto livre da IA, para nunca oferecer horário errado; a IA interpreta a escolha
+    (`escolha_horario`). "Nenhuma" ou 5 toques sem resposta à oferta = passa ao SDR sem agendar.
+11. **O que a IA não trata**: além do prompt, a mensagem não sai (e a conversa passa a humano) se tiver preço/piso com
+    valor em R$, desconto com número ou "melhor que a concorrência/agência". Faixa de faturamento em R$ continua liberada.
+12. **Resumo ao SDR**: nome/empresa/telefone vêm do `contexto` da LP (`nome`, `empresa`, `telefone`) — o COMERCIAL
+    precisa gravar `empresa` no contexto quando o formulário tiver; link = `{COMERCIAL_URL}/inbox?c=<conversation_id>`.
+
+A definir: porte mínimo da gestão de tráfego isolada (`trafego_isolado_porte_min`); lista de cidades próximas
+(hoje só Timon); scripts de referência (roteiro, toques, esteira, mensagens); LP que termina "sem resposta" ou
+na esteira sem ninguém do time ver (pendência já registrada).
