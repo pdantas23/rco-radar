@@ -152,3 +152,59 @@ ou ficou em alerta**; link da conversa; horário escolhido (se houve).
 ### Medição (fase 2, depende de tela → aprovação do Philip)
 SDR avalia cada lead (bom/médio/ruim + motivo); amostra semanal dos descartados nas 4 primeiras semanas;
 indicadores: % passados que viram reunião realizada, comparecimento, conversão.
+
+### Contrato das rotas de agenda (worker)
+Fixado pelo worker (13/11) para o COMERCIAL seguir. Mesma autenticação das outras rotas internas
+(header `x-radar-secret`); ids como texto (uuid); horários em ISO 8601 **com fuso** (`2026-11-18T10:00:00-03:00`).
+Erro de negócio = HTTP 200/4xx com `{ok: false, motivo}`; HTTP 5xx ou rede = falha temporária (o worker não
+oferece horário e passa ao SDR sem agendar, nunca trava o lead).
+
+`POST /api/internal/radar/horarios`
+```json
+// request
+{"agency_id": "uuid", "conversa_id": "uuid (radar.conversas.id)", "conversation_id": "uuid do inbox",
+ "lead_id": "uuid | null (null = LP)", "duracao_min": 30}
+// response ok — exatamente 2 opções, em dias ou turnos diferentes
+{"ok": true, "sdr_id": "uuid (profiles.user_id do SDR escolhido pela distribuição)",
+ "opcoes": [{"inicio": "2026-11-18T10:00:00-03:00", "fim": "2026-11-18T10:30:00-03:00",
+             "rotulo": "quarta (18/11) às 10h"},
+            {"inicio": "2026-11-19T15:00:00-03:00", "fim": "2026-11-19T15:30:00-03:00",
+             "rotulo": "quinta (19/11) às 15h"}]}
+// response sem oferta
+{"ok": false, "motivo": "sem_google | sem_horario | sem_sdr | conversa_nao_encontrada | requisicao_invalida"}
+```
+`rotulo` é o texto que vai ao lead (o worker não formata data). Menos de 2 opções = tratado como `sem_horario`.
+
+`POST /api/internal/radar/agendar`
+```json
+// request
+{"agency_id": "uuid", "conversa_id": "uuid", "conversation_id": "uuid", "lead_id": "uuid | null",
+ "sdr_id": "uuid (o devolvido por /horarios)", "inicio": "ISO", "fim": "ISO",
+ "idempotency_key": "radar-agendar-<conversa_id>-<inicio>"}
+// response ok
+{"ok": true, "evento_id": "id do evento no Google", "lead_call_id": "uuid", "meet_url": "https://meet... | null",
+ "inicio": "ISO", "fim": "ISO"}
+// response sem agendar
+{"ok": false, "motivo": "horario_indisponivel | sem_google | conversa_nao_encontrada | requisicao_invalida"}
+```
+Idempotente pela `idempotency_key` (repetir a chamada não cria 2 eventos). `horario_indisponivel` (revalidação
+falhou): o worker pede novos horários **uma vez** e oferece de novo; na 2ª falha passa ao SDR sem agendar.
+
+Ordem no worker: `/horarios` → IA oferece → lead escolhe → `/agendar` → `/passar`. Como o negócio nasce no
+`/passar`, o `/agendar` não depende dele: registra o evento e a reunião (`lead_calls`) pelo contato da conversa;
+o `/passar` recebe `agendamento` e o COMERCIAL põe o negócio em "Reunião agendada".
+
+`POST /api/internal/radar/passar` (v2, campos novos opcionais; `motivo` continua `qualificado` para
+passa_direto, passa_alerta e redireciona):
+```json
+{"...": "corpo de hoje",
+ "classificacao": "passa_direto | passa_alerta | redireciona",
+ "alertas": ["texto do portão em alerta", "..."],
+ "agendamento": {"sdr_id": "uuid", "inicio": "ISO", "fim": "ISO", "rotulo": "...", "evento_id": "...",
+                 "lead_call_id": "uuid", "meet_url": "... | null"} | null}
+```
+`resumo` passa a ser o **resumo completo ao SDR** (todos os campos da seção "Resumo ao SDR"), já montado pelo
+worker; o COMERCIAL só o grava. `radar.conversas.nota_detalhe` (v2) =
+`{versao: 2, classificacao, justificativa, portoes: [{portao, status: ok|alerta|falha|esteira|pendente, valor, motivo}], fatos}`;
+`decisao` passa a aceitar `passa_direto | passa_alerta | esteira | desqualifica | redireciona | em_andamento`
+(migration 009 do Radar). `/descartar` (desqualifica de LP) recebe em `motivo` a justificativa.
