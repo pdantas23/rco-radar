@@ -6,7 +6,7 @@ dados extras) continua vindo da BrasilAPI, grátis, só para o CNPJ escolhido. A
 
 import httpx
 
-from radar.cnpj_match import _base, _similar, normalizar_nome
+from radar.cnpj_match import GENERICO_NOME, _base, _similar, nome_maps, normalizar_nome
 from radar.fontes.base import DadosCnpj, FonteCnpj
 from radar.fontes.cnpj import BRASILAPI_URL, TIMEOUT, termos_busca
 from radar.importar_cnpj import ALIAS_MUNICIPIO
@@ -69,12 +69,16 @@ class CnpjBaseLocal(FonteCnpj):
         self.custo_ultima_chamada = 0.0
         uf = (uf or "").strip().upper()
         cidade = _municipio(municipio)
+        nome = nome_maps(nome)          # 'Barba Negra | Barbearia em Teresina' -> 'Barba Negra'
         termos = termos_busca(nome)
         if not termos or not uf or not cidade:
             return []
         self._exigir_uf(uf)
         alvo = normalizar_nome(nome)
-        padroes = [f"%{t}%" for t in termos if len(t) >= MIN_TRIGRAMA] or [f"%{alvo}%"]
+        uteis = [t for t in termos if len(t) >= MIN_TRIGRAMA]
+        # palavra do ramo ('barbearia') traz a cidade inteira e empurra o candidato certo para fora do limite
+        distintos = [t for t in uteis if t not in GENERICO_NOME and t not in cidade.split()]
+        padroes = [f"%{t}%" for t in (distintos or uteis)] or [f"%{alvo}%"]
         linhas = self.conn.execute(BUSCA, {"uf": uf, "municipio": cidade, "termos": padroes, "nome": alvo,
                                            "limite": LIMITE_SQL}).fetchall()
 
