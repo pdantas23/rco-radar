@@ -138,6 +138,8 @@ class Resultado:
     candidato: Candidato
     confianca: int
     motivo: str
+    # nome idêntico, mas sem endereço/CEP/telefone que confirme: não assume, pede um humano
+    so_nome_igual: bool = False
 
 
 def pontuar(negocio: Negocio, cand: Candidato) -> Resultado:
@@ -180,16 +182,18 @@ def pontuar(negocio: Negocio, cand: Candidato) -> Resultado:
         pontos += 20
         motivos.append("telefone igual")
 
+    so_nome_igual = False
     if not tem_tel and not (tem_nome and tem_local):
         pontos = min(pontos, TETO_SEM_TRAVA)
         motivos.append("endereço não confere" if tem_nome else "nome não confere")
+        so_nome_igual = sim_nome >= 0.95
 
     situacao = (cand.situacao or "").strip().upper()
     if situacao and situacao != "ATIVA":
         pontos -= 15
         motivos.append(f"situação {situacao.lower()}")
 
-    return Resultado(cand, max(0, min(100, pontos)), ", ".join(motivos))
+    return Resultado(cand, max(0, min(100, pontos)), ", ".join(motivos), so_nome_igual)
 
 
 @dataclass
@@ -203,7 +207,8 @@ def decidir(negocio: Negocio, candidatos: list[Candidato]) -> Decisao:
     res = sorted((pontuar(negocio, c) for c in candidatos), key=lambda r: r.confianca, reverse=True)
     aceitos = [r for r in res if r.confianca >= LIMIAR_ACEITE]
     if not aceitos:
-        return Decisao(None, False, res)
+        # mesmo nome sem endereço que confirme (outra filial, base sem endereço, homônimo): humano decide
+        return Decisao(None, any(r.so_nome_igual for r in res), res)
     if len(aceitos) > 1 and aceitos[0].confianca - aceitos[1].confianca < MARGEM_EMPATE:
         return Decisao(None, True, res)
     return Decisao(aceitos[0], False, res)

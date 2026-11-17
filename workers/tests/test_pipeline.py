@@ -12,7 +12,7 @@ from radar.fontes.base import Avaliacao, DadosCnpj, NegocioMaps, PerfilInstagram
 from radar.fontes.maps_gosom import FonteMapsComReserva
 from radar.site import ResultadoSite
 from radar.worker import processar_um
-from tests.conftest import AGENCIA, DONO, OUTRA_AGENCIA
+from tests.conftest import AGENCIA, DONO, DSN, OUTRA_AGENCIA
 
 
 def negocio(pid, nome, **kw):
@@ -429,3 +429,22 @@ async def test_fonte_paga_desligada_e_sem_arroba_fica_nao_verificado(conn):
     await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé", site="ze.com.br")], ig=ig))
     assert ig.procuras == 0
     assert conn.execute("select instagram_status, status from radar.leads").fetchone() == ("nao_verificado", "pontuado")
+
+
+async def test_pesquisa_gratis_nao_chama_fonte_paga(conn):
+    """Servidor próprio (gosom) = grátis de ponta a ponta: sem busca nem leitura paga de Instagram, mesmo habilitada."""
+    pid = criar_pesquisa(conn, max_resultados=10)
+    conn.execute("update radar.pesquisas set fonte_maps = 'gosom_maps' where id = %s", (pid,))
+    ig = IgContador()
+    await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé", site="ze.com.br"),
+                                   negocio("p2", "Salão da Ana", site="ana.com.br")], ig=ig, instagram_site=arroba_do_site))
+    assert (ig.procuras, ig.perfis) == (0, 0)
+    assert conn.execute("select coalesce(sum(valor), 0) from radar.custos_api").fetchone()[0] == 0
+
+
+async def test_busca_no_maps_grava_andamento_fora_da_transacao(conn, monkeypatch):
+    monkeypatch.setenv("RADAR_DATABASE_URL", DSN)
+    criar_pesquisa(conn, max_resultados=10)
+    await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé")]))
+    andamento = conn.execute("select payload->'andamento' from radar.jobs where tipo = 'minerar'").fetchone()[0]
+    assert andamento["etapa"] == "gravando" and andamento["achados"] == 1 and andamento["areas"] >= 1

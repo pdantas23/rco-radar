@@ -88,7 +88,9 @@ async def test_passa_pelo_cnpj_match(base):
     dec = cnpj_match.decidir(cnpj_match.Negocio("Barbearia do Zé", "R. A, 100", "Teresina"),
                              [cnpj_match.Candidato(d.cnpj, d.razao_social, d.nome_fantasia, d.logradouro, d.numero,
                                                    d.municipio, d.cep, "", d.situacao) for d in dados])
-    assert dec.escolhido.candidato.cnpj == "11111111000111" and dec.escolhido.confianca == 60
+    # a base não tem o endereço desse CNPJ: nome igual sozinho não assume, vai para revisão humana
+    assert dec.escolhido is None and dec.revisao_humana
+    assert dec.candidatos[0].candidato.cnpj == "11111111000111" and dec.candidatos[0].confianca == 45
 
 
 async def decidir(c, nome, endereco, cep=""):

@@ -17,6 +17,8 @@ Falha em uma etapa não trava o lead. Toda chamada externa grava custo em radar.
 import json
 import logging
 import math
+import os
+import time
 from dataclasses import asdict
 
 import psycopg
@@ -67,6 +69,32 @@ class Fontes:
 
 def _cur(conn):
     return conn.cursor(row_factory=dict_row)
+
+
+def avisar_andamento(job_id: int, andamento: dict) -> None:
+    """Grava o andamento em radar.jobs.payload['andamento'] por uma conexão À PARTE.
+
+    O job roda numa transação só (tudo ou nada), então nada do que ele grava aparece antes do fim.
+    Esta escrita sai na hora para a tela mostrar a busca no Maps acontecendo. Só toca a linha do job,
+    que a transação principal não trava até concluir; falhar aqui nunca derruba a pesquisa.
+    """
+    url = os.environ.get("RADAR_DATABASE_URL")
+    if not url:
+        return
+    try:
+        with psycopg.connect(url, autocommit=True, connect_timeout=5) as c:
+            c.execute("update radar.jobs set payload = coalesce(payload, '{}'::jsonb) || jsonb_build_object('andamento', %s::jsonb) "
+                      "where id = %s", (json.dumps(andamento), job_id))
+    except Exception as e:                      # noqa: BLE001 — andamento é só informativo
+        log.warning("andamento do job %s não gravado: %s", job_id, e)
+
+
+def pesquisa_gratis(conn, pesquisa_id) -> bool:
+    """Pesquisa pelo servidor próprio (gosom) é a opção grátis: nenhuma fonte paga roda para ela."""
+    if not pesquisa_id:
+        return False
+    row = conn.execute("select fonte_maps from radar.pesquisas where id = %s", (pesquisa_id,)).fetchone()
+    return bool(row) and row[0] == "gosom_maps"
 
 
 # ── orçamento por agência ────────────────────────────────────────────────
@@ -142,7 +170,10 @@ async def minerar(conn: psycopg.Connection, job: fila.Job, f: Fontes) -> None:
     termo = p["nicho_texto"] + (f" {p['categoria_maps']}" if p["categoria_maps"] else "")
 
     vistos, aceitos = set(), []
-    for cel in celulas:
+    inicio = time.time()
+    for i, cel in enumerate(celulas):
+        avisar_andamento(job.id, {"etapa": "maps", "area": i + 1, "areas": len(celulas), "achados": len(aceitos),
+                                  "maximo": maximo, "inicio": inicio, "agora": time.time()})
         previsto = maps.estimar(por_celula) if hasattr(maps, "estimar") else 0.0
         if hasattr(maps, "reserva"):
             # principal grátis sempre roda; a reserva paga só entra se couber no teto
@@ -175,6 +206,8 @@ async def minerar(conn: psycopg.Connection, job: fila.Job, f: Fontes) -> None:
         if len(aceitos) >= maximo:
             break
 
+    avisar_andamento(job.id, {"etapa": "gravando", "areas": len(celulas), "achados": len(aceitos[:maximo]),
+                              "maximo": maximo, "inicio": inicio, "agora": time.time()})
     novos = 0
     for n in aceitos[:maximo]:
         lead_id, novo = _gravar_lead(conn, ag, n, maps.chave)
@@ -255,7 +288,8 @@ async def enriquecer_instagram(conn, job: fila.Job, f: Fontes) -> None:
     if not usuario and lead["site"]:
         usuario = await f.instagram_site(lead["site"])      # grátis: antes de qualquer chamada paga
         achado_gratis = bool(usuario)
-    paga = getattr(f.instagram, "habilitada", True)
+    # pesquisa grátis (servidor próprio): só o @ achado no site, sem busca nem leitura paga do perfil
+    paga = getattr(f.instagram, "habilitada", True) and not pesquisa_gratis(conn, job.pesquisa_id)
     sem_orcamento = False
     if not usuario:
         if not paga:
@@ -303,7 +337,7 @@ async def enriquecer_instagram(conn, job: fila.Job, f: Fontes) -> None:
     conhecido = bool(usuario) and confianca >= LIMITE_CONFIANCA_IG and not paga
     status = "encontrado" if perfil or conhecido else ("nao_verificado" if sem_orcamento else "nao_encontrado")
     conn.execute("update radar.leads set instagram_status = %s where id = %s", (status, lead["id"]))
-    if not job.payload.get("sem_anuncios") and anuncios_ligados(conn, ag):
+    if not job.payload.get("sem_anuncios") and anuncios_ligados(conn, ag) and not pesquisa_gratis(conn, job.pesquisa_id):
         fila.enfileirar(conn, "verificar_anuncios", agency_id=ag, pesquisa_id=job.pesquisa_id, lead_id=lead["id"],
                         payload={"pagina": job.payload.get("facebook") or (perfil.usuario if perfil else None)})
 
@@ -349,7 +383,8 @@ async def enriquecer_cnpj(conn, job: fila.Job, f: Fontes) -> None:
     exigir_ativo(conn, ag)
     lead = _cur(conn).execute("select * from radar.leads where id = %s", (job.lead_id,)).fetchone()
     previsto = f.cnpj.estimar(10)
-    if previsto and not pode_gastar(conn, ag, previsto):         # fonte grátis não depende do teto
+    # fonte paga: precisa caber no teto e não roda em pesquisa grátis; a base própria (grátis) roda sempre
+    if previsto and (pesquisa_gratis(conn, job.pesquisa_id) or not pode_gastar(conn, ag, previsto)):
         conn.execute("update radar.leads set cnpj_status = 'nao_verificado' where id = %s", (lead["id"],))
         return
     cands = await f.cnpj.buscar_por_nome(lead["nome"], lead["cidade"] or "", lead["estado"] or "")

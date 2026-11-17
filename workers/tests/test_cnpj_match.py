@@ -53,7 +53,7 @@ def test_nome_igual_em_outro_endereco_nao_assume():
     neg = _neg("Maverick", "Alameda Parnaíba, 1783 - Vila Operaria", "64002-475")
     d = decidir(neg, [cand(nome_fantasia="MAVERICK", razao_social="ISAAC MESQUITA RESTAURANTE LTDA",
                            logradouro="AVENIDA UNIVERSITARIA", numero="880", cep="64049550")])
-    assert d.escolhido is None
+    assert d.escolhido is None and d.revisao_humana       # nome idêntico: um humano olha, não some
     assert "endereço não confere" in d.candidatos[0].motivo
 
 
@@ -62,7 +62,7 @@ def test_outra_barbearia_no_mesmo_cep_nao_assume():
     neg = _neg("LB BARBEARIA THE", "Av. Noronha Almeida, 2543 - 1 - São João", "64045-500")
     d = decidir(neg, [cand(nome_fantasia="BARBEARIA H2I", razao_social="H2I BARBEARIA LTDA",
                            logradouro="AVENIDA NORONHA ALMEIDA", numero="2400", cep="64045500")])
-    assert d.escolhido is None
+    assert d.escolhido is None and not d.revisao_humana   # nome diferente: não encontrado, sem revisão
     assert "nome não confere" in d.candidatos[0].motivo
 
 
