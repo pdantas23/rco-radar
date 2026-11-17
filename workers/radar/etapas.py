@@ -382,16 +382,24 @@ async def enriquecer_cnpj(conn, job: fila.Job, f: Fontes) -> None:
     ag = job.agency_id
     exigir_ativo(conn, ag)
     lead = _cur(conn).execute("select * from radar.leads where id = %s", (job.lead_id,)).fetchone()
+    from radar.fontes.cnpj_local import BaseCnpjSemDados
     previsto = f.cnpj.estimar(10)
     # fonte paga: precisa caber no teto e não roda em pesquisa grátis; a base própria (grátis) roda sempre
     if previsto and (pesquisa_gratis(conn, job.pesquisa_id) or not pode_gastar(conn, ag, previsto)):
         conn.execute("update radar.leads set cnpj_status = 'nao_verificado' where id = %s", (lead["id"],))
         return
-    cands = await f.cnpj.buscar_por_nome(lead["nome"], lead["cidade"] or "", lead["estado"] or "")
+    try:
+        cands = await f.cnpj.buscar_por_nome(lead["nome"], lead["cidade"] or "", lead["estado"] or "")
+    except BaseCnpjSemDados:
+        # estado ainda não importado na base própria (ex.: Timon-MA numa pesquisa de Teresina): não é falha
+        conn.execute("update radar.leads set cnpj_status = 'nao_verificado' where id = %s", (lead["id"],))
+        return
     custo(conn, ag, f.cnpj.chave, "buscar_por_nome", f.cnpj.custo_ultima_chamada, len(cands),
           pesquisa_id=job.pesquisa_id, lead_id=lead["id"])
+    ramo = conn.execute("select concat_ws(' ', nicho_texto, categoria_maps) from radar.pesquisas where id = %s",
+                        (job.pesquisa_id,)).fetchone() if job.pesquisa_id else None
     neg = cnpj_match.Negocio(lead["nome"], lead["endereco"], lead["cidade"] or "", lead["cep"] or "",
-                             lead["telefone"] or "")
+                             lead["telefone"] or "", ramo[0] if ramo else "")
     por_cnpj = {c.cnpj: c for c in cands}
     dec = cnpj_match.decidir(neg, [cnpj_match.Candidato(
         c.cnpj, c.razao_social, c.nome_fantasia, c.logradouro, c.numero, c.municipio, c.cep,

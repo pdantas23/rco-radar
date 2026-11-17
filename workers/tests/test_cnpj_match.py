@@ -106,3 +106,78 @@ def test_telefone_igual_dispensa_endereco():
     neg = Negocio(nome="Barbearia do Zé", endereco="", cidade="Teresina", telefone="+5586999990000")
     r = pontuar(neg, cand(logradouro="RUA Z", numero="9", cep="", telefone="+5586999990000"))
     assert r.confianca >= 50
+
+
+# Rodada real de lojas de celular em Teresina (17/11/2026): a lista fixa só cobria barbearia.
+RAMO = "Loja de celular Loja de celulares"
+
+
+def test_nicho_da_pesquisa_nao_conta_como_nome():
+    """VM CELL casava com DMCELL só pela rua: 'cell' é palavra do ramo."""
+    neg = Negocio(nome="VM CELL - Assistência Técnica de Celular Teresina", endereco="Rua Coelho Rodrigues, 1500 - Centro",
+                  cidade="Teresina", ramo=RAMO)
+    d = decidir(neg, [cand(nome_fantasia="DMCELL", razao_social="DMCELL COMERCIO E SERVICOS LTDA",
+                           logradouro="RUA COELHO RODRIGUES", numero="1720", cep="64000999")])
+    assert d.escolhido is None and not d.revisao_humana
+
+
+def test_nome_so_com_palavra_do_ramo_nao_casa_com_ninguem():
+    neg = Negocio(nome="Celular", endereco="Av. Frei Serafim, 10", cidade="Teresina", ramo=RAMO)
+    d = decidir(neg, [cand(nome_fantasia="THE CELULAR", razao_social="THE CELULAR LTDA", logradouro="RUA X", numero="1"),
+                      cand(cnpj="2", nome_fantasia="CASA DO CELULAR", razao_social="CDC LTDA", logradouro="RUA Y", numero="2")])
+    assert d.escolhido is None and not d.revisao_humana
+    assert all(r.confianca < 50 for r in d.candidatos)
+
+
+def test_ramo_nao_atrapalha_o_casamento_certo():
+    neg = Negocio(nome="T&T Cell", endereco="T&T Cell - Rua Areolino de Abreu, 1200 - Centro", cidade="Teresina",
+                  cep="64000-180", ramo=RAMO)
+    d = decidir(neg, [cand(nome_fantasia="T & T CELL", razao_social="A C OLIVEIRA LIMA LTDA",
+                           logradouro="RUA AREOLINO DE ABREU", numero="1200", cep="64000180")])
+    assert d.escolhido is not None and d.escolhido.confianca >= 90
+
+
+def test_nome_contido_com_so_a_mesma_rua_nao_assume():
+    """Dirceu Celular × DIRCEU VET (veterinário) na mesma rua, outro número."""
+    neg = Negocio(nome="Dirceu Celular", endereco="Rua Paissandu, 1200 - Centro", cidade="Teresina", ramo=RAMO)
+    d = decidir(neg, [cand(nome_fantasia="DIRCEU VET", razao_social="D S VETERINARIA LTDA",
+                           logradouro="RUA PAISSANDU", numero="900", cep="64000555")])
+    assert d.escolhido is None
+
+
+def test_nome_so_do_ramo_identico_e_com_endereco_casa():
+    """Shop do Celular = SHOP DO CELULAR, mesmo endereço e CEP: era acerto e não pode se perder."""
+    neg = Negocio(nome="Shop do Celular", endereco="Shop do Celular - Rua Simplício Mendes, 300 - Centro",
+                  cidade="Teresina", cep="64000-110", ramo=RAMO)
+    d = decidir(neg, [cand(nome_fantasia="SHOP DO CELULAR", razao_social="F R ALVES SIQUEIRA LTDA",
+                           logradouro="RUA SIMPLICIO MENDES", numero="300", cep="64000110")])
+    assert d.escolhido is not None and d.escolhido.confianca >= 90
+
+
+def test_nome_contido_com_numero_igual_casa():
+    neg = Negocio(nome="PHONE STORE TERESINA RIO POTY", endereco="Av. Marechal Castelo Branco, 911",
+                  cidade="Teresina", cep="64000-200", ramo=RAMO)
+    d = decidir(neg, [cand(nome_fantasia="PHONE STORE TERESINA", razao_social="PHONE STORE COMERCIO LTDA",
+                           logradouro="AVENIDA MARECHAL CASTELO BRANCO", numero="911", cep="64000200")])
+    assert d.escolhido is not None
+
+
+def test_nome_do_shopping_no_nome_da_loja_nao_identifica():
+    """PHONE STORE TERESINA RIO POTY empatava com BAGAGGIO TERESINA RIO POTY no mesmo shopping."""
+    neg = Negocio(nome="PHONE STORE TERESINA RIO POTY",
+                  endereco="PHONE STORE TERESINA RIO POTY - Av. Mar. Castelo Branco, 911 - Piso L3 do SHOPPING - RIO POTY, "
+                           "Teresina - PI, 64003-901", cidade="Teresina", cep="64003-901", ramo=RAMO)
+    certa = cand(cnpj="1", nome_fantasia="PHONE STORE TERESINA", razao_social="PHONE STORE COMERCIO LTDA",
+                 logradouro="AVENIDA MARECHAL CASTELO BRANCO", numero="911", cep="64003901")
+    vizinha = cand(cnpj="2", nome_fantasia="", razao_social="BAGAGGIO TERESINA RIO POTY LTDA",
+                   logradouro="AVENIDA MARECHAL CASTELO BRANCO", numero="911", cep="64003901")
+    d = decidir(neg, [vizinha, certa])
+    assert d.escolhido is not None and d.escolhido.candidato.cnpj == "1"
+
+
+def test_nome_repetido_antes_da_rua_no_endereco_continua_sendo_nome():
+    neg = Negocio(nome="ItemTudo Cell", endereco="ItemTudo Cell - Loja Itemtudo Cell Av. Pres. Kennedy, 1585 Loja E 10 - "
+                  "Horto Florestal, Teresina - PI, 64052-675", cidade="Teresina", cep="64052-675", ramo=RAMO)
+    d = decidir(neg, [cand(nome_fantasia="ITEMTUDO CEL", razao_social="A U CAMARA",
+                           logradouro="AVENIDA PRESIDENTE KENNEDY", numero="1585", cep="64052675")])
+    assert d.escolhido is not None

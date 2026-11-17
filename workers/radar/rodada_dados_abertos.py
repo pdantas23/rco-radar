@@ -48,7 +48,7 @@ async def avaliar(n, cnpj, site, instagram_site) -> dict:
     try:
         cands = await cnpj.buscar_por_nome(n.nome, n.cidade, n.estado)
         dec = cnpj_match.decidir(
-            cnpj_match.Negocio(n.nome, n.endereco, n.cidade, n.cep, tel.e164 if tel else ""),
+            cnpj_match.Negocio(n.nome, n.endereco, n.cidade, n.cep, tel.e164 if tel else "", n.categoria or ""),
             [cnpj_match.Candidato(c.cnpj, c.razao_social, c.nome_fantasia, c.logradouro, c.numero, c.municipio, c.cep, "",
                                   c.situacao) for c in cands])
         por_cnpj = {c.cnpj: c for c in cands}
