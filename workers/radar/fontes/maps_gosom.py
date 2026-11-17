@@ -110,11 +110,19 @@ class MapsGosom(FonteMaps):
     env = ("GOSOM_URL",)
     custo_unitario_brl = 0.0
 
+    # Falhas de conexão seguidas toleradas ao acompanhar a busca (o motor reiniciando, a rede piscando).
+    FALHAS_SEGUIDAS_MAX = 12
+    # O motor roda uma busca por vez e o worker manda uma de cada vez: a nossa parada em "pending" por mais
+    # que isso quer dizer que o motor está preso numa busca que não termina (aconteceu em 17/11/2026).
+    PENDENTE_MAX_SEG = 300
+
     def __init__(self, url: str | None = None, client: httpx.AsyncClient | None = None,
-                 espera_seg: float = 5.0, tempo_max_seg: int = 900, depth: int | None = None):
+                 espera_seg: float = 5.0, tempo_max_seg: int = 900, depth: int | None = None,
+                 pendente_max_seg: float | None = None):
         self.url = (url or os.environ.get("GOSOM_URL", "http://127.0.0.1:18080")).rstrip("/")
         self.client = client
         self.espera_seg = espera_seg
+        self.pendente_max_seg = self.PENDENTE_MAX_SEG if pendente_max_seg is None else pendente_max_seg
         self.tempo_max_seg = tempo_max_seg
         self.depth = depth or int(os.environ.get("GOSOM_DEPTH", "10"))
         # ~7,6 lugares por nível de profundidade (76 em depth 10), com folga
@@ -130,15 +138,28 @@ class MapsGosom(FonteMaps):
             if r.status_code >= 400:
                 raise ErroGosom(f"criar job: HTTP {r.status_code} {r.text[:200]}")
             job_id = r.json()["id"]
-            limite = asyncio.get_event_loop().time() + self.tempo_max_seg + 60
+            relogio = asyncio.get_event_loop().time
+            inicio = relogio()
+            limite = inicio + self.tempo_max_seg + 60
+            falhas = 0
             while True:
-                # a struct Job do motor não tem tag json: o campo sai como "Status"
-                st = (await c.get(f"{self.url}/api/v1/jobs/{job_id}")).json().get("Status")
+                try:
+                    # a struct Job do motor não tem tag json: o campo sai como "Status"
+                    st = (await c.get(f"{self.url}/api/v1/jobs/{job_id}")).json().get("Status")
+                    falhas = 0
+                except (httpx.HTTPError, ValueError) as e:
+                    falhas += 1
+                    if falhas >= self.FALHAS_SEGUIDAS_MAX:
+                        raise ErroGosom(f"sem resposta do motor em {falhas} tentativas seguidas ({type(e).__name__})") from e
+                    st = None
                 if st == "ok":
                     break
                 if st == "failed":
                     raise ErroGosom(f"job {job_id} falhou no motor")
-                if asyncio.get_event_loop().time() > limite:
+                if st == "pending" and relogio() - inicio > self.pendente_max_seg:
+                    raise ErroGosom(f"o motor não começou a busca em {int(self.pendente_max_seg // 60)} min; "
+                                    "ele parece preso em outra busca e precisa ser reiniciado")
+                if relogio() > limite:
                     raise ErroGosom(f"job {job_id} passou do tempo")
                 await asyncio.sleep(self.espera_seg)
             d = await c.get(f"{self.url}/api/v1/jobs/{job_id}/download")

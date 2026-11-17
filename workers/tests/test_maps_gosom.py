@@ -3,10 +3,11 @@ import io
 import json
 
 import httpx
+import pytest
 import respx
 
 from radar.fontes.base import ConsultaMaps
-from radar.fontes.maps_gosom import FonteMapsComReserva, MapsGosom, converter, zoom_para_raio
+from radar.fontes.maps_gosom import ErroGosom, FonteMapsComReserva, MapsGosom, converter, zoom_para_raio
 from radar.geo import grade
 
 COLUNAS = ["input_id", "link", "title", "category", "address", "open_hours", "website", "phone", "review_count",
@@ -113,3 +114,35 @@ async def test_sem_reserva_a_falha_sobe():
     import pytest
     with pytest.raises(RuntimeError):
         await FonteMapsComReserva(Falha(), None).buscar(ConsultaMaps("x", 0, 0, 1))
+
+
+@respx.mock
+async def test_motor_fora_do_ar_por_instantes_nao_derruba_a_busca():
+    """Reiniciar o motor no meio da busca (17/11/2026) derrubava a pesquisa na primeira falha de conexão."""
+    base = "http://gosom:8080"
+    respx.post(f"{base}/api/v1/jobs").mock(return_value=httpx.Response(201, json={"id": "j1"}))
+    respx.get(f"{base}/api/v1/jobs/j1").mock(side_effect=[
+        httpx.ConnectError("reiniciando"), httpx.ConnectError("reiniciando"),
+        httpx.Response(200, json={"ID": "j1", "Status": "working"}),
+        httpx.Response(200, json={"ID": "j1", "Status": "ok"})])
+    respx.get(f"{base}/api/v1/jobs/j1/download").mock(return_value=httpx.Response(200, text=csv_de([linha()])))
+    r = await MapsGosom(url=base, espera_seg=0).buscar(ConsultaMaps("barbearia", -5.09, -42.8, 2.0, limite=20))
+    assert [n.nome for n in r] == ["Barbearia do Zé"]
+
+
+@respx.mock
+async def test_motor_fora_do_ar_de_vez_desiste_com_motivo():
+    base = "http://gosom:8080"
+    respx.post(f"{base}/api/v1/jobs").mock(return_value=httpx.Response(201, json={"id": "j1"}))
+    respx.get(f"{base}/api/v1/jobs/j1").mock(side_effect=httpx.ConnectError("fora"))
+    with pytest.raises(ErroGosom, match="sem resposta do motor em 12 tentativas"):
+        await MapsGosom(url=base, espera_seg=0).buscar(ConsultaMaps("barbearia", -5.09, -42.8, 2.0, limite=20))
+
+
+@respx.mock
+async def test_busca_parada_na_fila_do_motor_avisa_que_ele_travou():
+    base = "http://gosom:8080"
+    respx.post(f"{base}/api/v1/jobs").mock(return_value=httpx.Response(201, json={"id": "j1"}))
+    respx.get(f"{base}/api/v1/jobs/j1").mock(return_value=httpx.Response(200, json={"ID": "j1", "Status": "pending"}))
+    with pytest.raises(ErroGosom, match="parece preso em outra busca"):
+        await MapsGosom(url=base, espera_seg=0, pendente_max_seg=0).buscar(ConsultaMaps("barbearia", -5.09, -42.8, 2.0, limite=20))
