@@ -25,7 +25,7 @@ insert into radar.pesquisas (id, nome, nicho_texto, categoria_maps, lugar_estado
  ('aaaaaaaa-0000-0000-0000-000000000004','padaria · Parnaíba · 18/10','padaria','Padaria','PI','Parnaíba','{"max_resultados":200,"nota_minima":4.0,"min_avaliacoes":0}','gosom_maps','22222222-2222-2222-2222-222222222222', now()-interval '1 day','falhou',4.2,0,0,0),
  ('aaaaaaaa-0000-0000-0000-000000000005','mercado · Picos · 18/10','mercado','Supermercado','PI','Picos','{"max_resultados":100,"nota_minima":4.0,"min_avaliacoes":0}','apify_maps','22222222-2222-2222-2222-222222222222', now()-interval '30 hours','falhou',4.7,0,0,0);
 insert into radar.jobs (tipo, pesquisa_id, status, erro, tentativas, concluido_em) values
- ('minerar','aaaaaaaa-0000-0000-0000-000000000004','falhou','O servidor próprio não conseguiu buscar no Google Maps (tempo esgotado). Você pode tentar de novo mais tarde ou buscar pela API (Apify), que é paga.',1, now()-interval '1 day'),
+ ('minerar','aaaaaaaa-0000-0000-0000-000000000004','falhou','O servidor próprio não conseguiu buscar no Google Maps (tempo esgotado). Você pode tentar de novo mais tarde.',1, now()-interval '1 day'),
  ('minerar','aaaaaaaa-0000-0000-0000-000000000005','falhou','A API (Apify) recusou a busca: limite de uso do provedor atingido. Tente de novo em alguns minutos.',1, now()-interval '30 hours');
 
 -- 175 leads

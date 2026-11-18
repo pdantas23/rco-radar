@@ -75,10 +75,11 @@ def fontes_reais(conn) -> etapas.Fontes:
     from radar.fontes.instagram_apify import InstagramApify
     from radar.fontes.maps_apify import MapsApify
     from radar.fontes.maps_gosom import MapsGosom
-    # Maps: gosom no nosso servidor (grátis); Apify assume se o gosom falhar
+    # Maps: gosom no nosso servidor (grátis). Toda pesquisa nova usa o gosom (decisão do Philip, 17/11);
+    # o Apify do Maps só fica para pesquisas antigas gravadas com fonte_maps = 'apify_maps' rodarem como eram.
     apify = MapsApify() if os.environ.get("APIFY_TOKEN") else None
     # Próprio NÃO cai sozinho na API (decisão do Philip, 20/10): se falhar, a pesquisa fica 'falhou'
-    # com a mensagem e a tela oferece "buscar pela API (Apify)".
+    # com a mensagem e a tela oferece "Tentar de novo".
     proprio = MapsGosom()
     mapas = {"gosom_maps": proprio}
     if apify:

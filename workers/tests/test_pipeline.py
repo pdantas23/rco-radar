@@ -53,10 +53,11 @@ class FakeMapsPago(FakeMaps):
 
 
 class FakeCnpj(Fake):
-    chave = "fake_cnpj"
+    """Como a base própria da Receita (produção): grátis."""
+    chave, custo_unitario_brl = "fake_cnpj", 0.0
 
     async def buscar_por_nome(self, nome, municipio, uf):
-        self.custo_ultima_chamada = 0.01
+        self.chamadas = getattr(self, "chamadas", 0) + 1
         if "Zé" not in nome:
             return []
         return [DadosCnpj(cnpj="11111111000111", razao_social="JOSE S SILVA ME", nome_fantasia="BARBEARIA DO ZE",
@@ -69,6 +70,15 @@ class FakeCnpj(Fake):
 
     async def detalhar(self, cnpj):
         return {"email": "ZE@receita.com", "opcao_pelo_simples": True, "cnae_fiscal": 9602501}
+
+
+class FakeCnpjPago(FakeCnpj):
+    """Fonte paga de CNPJ (ex.: Casa dos Dados): nunca roda para pesquisa."""
+    chave, custo_unitario_brl = "fake_cnpj_pago", 0.01
+
+    async def buscar_por_nome(self, nome, municipio, uf):
+        self.custo_ultima_chamada = 0.01
+        return await super().buscar_por_nome(nome, municipio, uf)
 
 
 class FakeInstagram(Fake):
@@ -109,7 +119,11 @@ async def geo(cidade, uf, agency_id):
     return (-5.09, -42.80)
 
 
-def criar_pesquisa(conn, agency_id=AGENCIA, **filtros) -> str:
+def criar_pesquisa(conn, agency_id=AGENCIA, instagram_pago=True, **filtros) -> str:
+    """Por padrão a pesquisa é "Completa" (filtros.instagram_pago = true), para exercitar as fontes pagas.
+    instagram_pago=False grava a pesquisa "Grátis" (sem a chave, como a tela grava)."""
+    if instagram_pago:
+        filtros["instagram_pago"] = True
     pid = conn.execute(
         """insert into radar.pesquisas (agency_id, nome, nicho_texto, lugar_estado, lugar_cidade, raio_km, filtros,
                  fonte_maps, usuario_id, status) values (%s, 'barbearia · Teresina', 'barbearia', 'PI', 'Teresina',
@@ -131,8 +145,8 @@ async def sem_arroba_no_site(url):
     return None
 
 
-def fontes(negocios, ig=None, maps=None, instagram_site=sem_arroba_no_site):
-    return etapas.Fontes(maps or FakeMaps(negocios), FakeCnpj(), ig or FakeInstagram(), FakeAnuncios(), geo,
+def fontes(negocios, ig=None, maps=None, instagram_site=sem_arroba_no_site, cnpj=None):
+    return etapas.Fontes(maps or FakeMaps(negocios), cnpj or FakeCnpj(), ig or FakeInstagram(), FakeAnuncios(), geo,
                          site_sem_site, instagram_site=instagram_site)
 
 
@@ -204,7 +218,7 @@ async def test_sem_teto_maps_gratis_roda_e_pagos_ficam_nao_verificados(conn):
     ig = FakeInstagram()
     await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé")], ig=ig))
     lead = conn.execute("select status, cnpj_status, instagram_status from radar.leads").fetchone()
-    assert lead == ("pontuado", "nao_verificado", "nao_verificado")
+    assert lead == ("pontuado", "encontrado", "nao_verificado")   # CNPJ da base própria (grátis) roda sem teto
     assert ig.chamadas == 0                                    # nenhuma chamada paga
     assert conn.execute("select coalesce(sum(valor), 0) from radar.custos_api").fetchone()[0] == 0
 
@@ -355,6 +369,7 @@ async def test_plataforma_escolhida_na_pesquisa(conn):
 
 
 async def test_proprio_falha_mostra_erro_e_nao_vai_para_a_api(conn):
+    """A mensagem só oferece tentar de novo. Uma pesquisa ANTIGA gravada com 'apify_maps' ainda roda como era."""
     class GosomFora(FakeMaps):
         async def buscar(self, consulta, uf_padrao=""):
             raise RuntimeError("playwright: target closed")
@@ -368,9 +383,10 @@ async def test_proprio_falha_mostra_erro_e_nao_vai_para_a_api(conn):
     tentativas, erro = conn.execute("""select tentativas, erro from radar.jobs
                                        where pesquisa_id = %s and tipo = 'minerar'""", (pid,)).fetchone()
     assert st == "falhou" and tentativas == 1                     # sem nova tentativa: erro aparece já
-    assert "servidor próprio" in erro and "API (Apify)" in erro and "target closed" in erro
+    assert "servidor próprio" in erro and "tentar de novo" in erro and "target closed" in erro
+    assert "Apify" not in erro
     assert conn.execute("select count(*) from radar.custos_api where valor > 0").fetchone()[0] == 0   # nada pago
-    # a tela oferece a API: o usuário troca a plataforma e manda de novo
+    # pesquisa antiga com a plataforma paga gravada: o worker ainda roda pelo Apify
     conn.execute("update radar.pesquisas set fonte_maps = 'apify_maps', status = 'na_fila' where id = %s", (pid,))
     fila.enfileirar(conn, "minerar", agency_id=AGENCIA, pesquisa_id=pid)
     await rodar_tudo(conn, f)
@@ -432,14 +448,53 @@ async def test_fonte_paga_desligada_e_sem_arroba_fica_nao_verificado(conn):
 
 
 async def test_pesquisa_gratis_nao_chama_fonte_paga(conn):
-    """Servidor próprio (gosom) = grátis de ponta a ponta: sem busca nem leitura paga de Instagram, mesmo habilitada."""
-    pid = criar_pesquisa(conn, max_resultados=10)
+    """Pesquisa "Grátis" (sem filtros.instagram_pago): sem busca nem leitura paga de Instagram, mesmo habilitada,
+    e sem anúncios mesmo com a flag da agência ligada."""
+    conn.execute("""insert into radar.config (agency_id, chave, valor)
+                    values (%s, 'anuncios_ativos', '{"ligado": true}')""", (AGENCIA,))
+    pid = criar_pesquisa(conn, instagram_pago=False, max_resultados=10)
     conn.execute("update radar.pesquisas set fonte_maps = 'gosom_maps' where id = %s", (pid,))
     ig = IgContador()
     await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé", site="ze.com.br"),
-                                   negocio("p2", "Salão da Ana", site="ana.com.br")], ig=ig, instagram_site=arroba_do_site))
+                                   negocio("p2", "Salão da Ana")], ig=ig, instagram_site=arroba_do_site))
     assert (ig.procuras, ig.perfis) == (0, 0)
+    assert conn.execute("select count(*) from radar.jobs where tipo = 'verificar_anuncios'").fetchone()[0] == 0
     assert conn.execute("select coalesce(sum(valor), 0) from radar.custos_api").fetchone()[0] == 0
+    # o @ do site vale (encontrado); quem não tem site fica 'nao_verificado', não 'nao_encontrado'
+    assert dict(conn.execute("select nome, instagram_status from radar.leads").fetchall()) == \
+        {"Barbearia do Zé": "encontrado", "Salão da Ana": "nao_verificado"}
+
+
+async def test_pesquisa_completa_le_o_perfil_e_verifica_anuncios(conn):
+    """Pesquisa "Completa" (filtros.instagram_pago = true), mesmo com o Maps pelo gosom: Instagram pago e anúncios rodam."""
+    conn.execute("""insert into radar.config (agency_id, chave, valor)
+                    values (%s, 'anuncios_ativos', '{"ligado": true}')""", (AGENCIA,))
+    pid = criar_pesquisa(conn, instagram_pago=True, max_resultados=10)
+    conn.execute("update radar.pesquisas set fonte_maps = 'gosom_maps' where id = %s", (pid,))
+    ig = IgContador()
+    await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé")], ig=ig))
+    assert (ig.procuras, ig.perfis) == (1, 1)
+    assert conn.execute("select count(*) from radar.jobs where tipo = 'verificar_anuncios'").fetchone()[0] == 1
+    assert conn.execute("select instagram_status, anuncio_ativo from radar.leads").fetchone() == ("encontrado", "nao")
+
+
+async def test_instagram_pago_em_texto_nao_liga(conn):
+    """Só o booleano true liga a fonte paga ("true" em texto não)."""
+    pid = criar_pesquisa(conn, instagram_pago=False, max_resultados=10)
+    conn.execute("""update radar.pesquisas set filtros = filtros || '{"instagram_pago": "true"}' where id = %s""", (pid,))
+    ig = IgContador()
+    await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé")], ig=ig))
+    assert (ig.procuras, ig.perfis) == (0, 0)
+
+
+async def test_cnpj_pago_nunca_roda_para_pesquisa(conn):
+    """Mesmo na "Completa" e com teto, CNPJ de pesquisa é só da base própria: a fonte paga não é chamada."""
+    criar_pesquisa(conn, instagram_pago=True, max_resultados=10)
+    cnpj = FakeCnpjPago()
+    await rodar_tudo(conn, fontes([negocio("p1", "Barbearia do Zé")], cnpj=cnpj))
+    assert getattr(cnpj, "chamadas", 0) == 0
+    assert conn.execute("select cnpj_status from radar.leads").fetchone()[0] == "nao_verificado"
+    assert conn.execute("select count(*) from radar.custos_api where fonte = 'fake_cnpj_pago'").fetchone()[0] == 0
 
 
 async def test_busca_no_maps_grava_andamento_fora_da_transacao(conn, monkeypatch):

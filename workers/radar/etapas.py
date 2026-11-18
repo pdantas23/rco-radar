@@ -45,10 +45,11 @@ class RadarDesligado(Exception):
 
 class FalhaDoMapsProprio(Exception):
     """O servidor próprio (gosom) não conseguiu buscar. Não há nova tentativa automática nem ida
-    automática para a API: a pesquisa fica 'falhou' com esta mensagem e a tela oferece a API (Apify)."""
+    para a API: a pesquisa fica 'falhou' com esta mensagem e a tela oferece "Tentar de novo".
+    Desde 17/11/2026 o Maps de toda pesquisa nova é o gosom (decisão do Philip); a API (Apify) não é mais oferecida."""
 
     MENSAGEM = ("O servidor próprio não conseguiu buscar no Google Maps ({detalhe}). "
-                "Você pode tentar de novo mais tarde ou buscar pela API (Apify), que é paga.")
+                "Você pode tentar de novo mais tarde.")
 
 
 class Fontes:
@@ -89,12 +90,23 @@ def avisar_andamento(job_id: int, andamento: dict) -> None:
         log.warning("andamento do job %s não gravado: %s", job_id, e)
 
 
-def pesquisa_gratis(conn, pesquisa_id) -> bool:
-    """Pesquisa pelo servidor próprio (gosom) é a opção grátis: nenhuma fonte paga roda para ela."""
+def instagram_pago_nos_filtros(filtros) -> bool:
+    """Pesquisa "Completa": filtros.instagram_pago = true (gravado pela tela de nova pesquisa).
+    Só o booleano true liga; ausente, null, "true" em texto ou qualquer outra coisa = pesquisa "Grátis"."""
+    return isinstance(filtros, dict) and filtros.get("instagram_pago") is True
+
+
+def instagram_pago(conn, pesquisa_id) -> bool:
+    """Fontes pagas de Instagram (busca pelo nome + leitura do perfil) e de anúncios para este job.
+
+    Com pesquisa: só na "Completa" (filtros.instagram_pago = true). Na "Grátis" fica só o @ achado no site.
+    Sem pesquisa (ação manual na ficha do lead, ex.: @ informado por uma pessoa): segue liberado, como antes;
+    o teto mensal da agência continua valendo.
+    """
     if not pesquisa_id:
-        return False
-    row = conn.execute("select fonte_maps from radar.pesquisas where id = %s", (pesquisa_id,)).fetchone()
-    return bool(row) and row[0] == "gosom_maps"
+        return True
+    row = conn.execute("select filtros from radar.pesquisas where id = %s", (pesquisa_id,)).fetchone()
+    return bool(row) and instagram_pago_nos_filtros(row[0])
 
 
 # ── orçamento por agência ────────────────────────────────────────────────
@@ -288,8 +300,8 @@ async def enriquecer_instagram(conn, job: fila.Job, f: Fontes) -> None:
     if not usuario and lead["site"]:
         usuario = await f.instagram_site(lead["site"])      # grátis: antes de qualquer chamada paga
         achado_gratis = bool(usuario)
-    # pesquisa grátis (servidor próprio): só o @ achado no site, sem busca nem leitura paga do perfil
-    paga = getattr(f.instagram, "habilitada", True) and not pesquisa_gratis(conn, job.pesquisa_id)
+    # pesquisa "Grátis": só o @ achado no site, sem busca nem leitura paga do perfil (paga só na "Completa")
+    paga = getattr(f.instagram, "habilitada", True) and instagram_pago(conn, job.pesquisa_id)
     sem_orcamento = False
     if not usuario:
         if not paga:
@@ -337,7 +349,8 @@ async def enriquecer_instagram(conn, job: fila.Job, f: Fontes) -> None:
     conhecido = bool(usuario) and confianca >= LIMITE_CONFIANCA_IG and not paga
     status = "encontrado" if perfil or conhecido else ("nao_verificado" if sem_orcamento else "nao_encontrado")
     conn.execute("update radar.leads set instagram_status = %s where id = %s", (status, lead["id"]))
-    if not job.payload.get("sem_anuncios") and anuncios_ligados(conn, ag) and not pesquisa_gratis(conn, job.pesquisa_id):
+    # anúncios (pagos) só na pesquisa "Completa" e com a flag da agência ligada
+    if not job.payload.get("sem_anuncios") and anuncios_ligados(conn, ag) and instagram_pago(conn, job.pesquisa_id):
         fila.enfileirar(conn, "verificar_anuncios", agency_id=ag, pesquisa_id=job.pesquisa_id, lead_id=lead["id"],
                         payload={"pagina": job.payload.get("facebook") or (perfil.usuario if perfil else None)})
 
@@ -384,8 +397,9 @@ async def enriquecer_cnpj(conn, job: fila.Job, f: Fontes) -> None:
     lead = _cur(conn).execute("select * from radar.leads where id = %s", (job.lead_id,)).fetchone()
     from radar.fontes.cnpj_local import BaseCnpjSemDados
     previsto = f.cnpj.estimar(10)
-    # fonte paga: precisa caber no teto e não roda em pesquisa grátis; a base própria (grátis) roda sempre
-    if previsto and (pesquisa_gratis(conn, job.pesquisa_id) or not pode_gastar(conn, ag, previsto)):
+    # fonte paga: nunca roda para pesquisa (CNPJ de pesquisa é só da base própria) e, fora dela, precisa caber
+    # no teto; a base própria (grátis) roda sempre
+    if previsto and (job.pesquisa_id or not pode_gastar(conn, ag, previsto)):
         conn.execute("update radar.leads set cnpj_status = 'nao_verificado' where id = %s", (lead["id"],))
         return
     try:
