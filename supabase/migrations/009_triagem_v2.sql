@@ -1,6 +1,6 @@
 -- RCO Radar — 009: Triagem IA v2 (portões, cadência de 5 toques, esteira, agenda) — contrato: docs/triagem-ia.md, seção v2
 --
--- NÃO APLICADA. Aplicar só com aprovação explícita do Philip, depois da 008, na instância `supabase` (vps-rco):
+APLICADA na instância `supabase` (vps-rco) em 18/11/2026 com aprovação do Philip, como supabase_admin, depois de ensaio com rollback das cinco (008, 009, 137, 138, 139).
 --   docker exec -i supabase_supabase-db-1 psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 < 009_triagem_v2.sql
 --
 -- O que muda (só radar.conversas; nenhum dado existente é alterado):

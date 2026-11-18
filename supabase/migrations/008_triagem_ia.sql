@@ -1,6 +1,6 @@
 -- RCO Radar — 008: Triagem IA (contrato: docs/triagem-ia.md)
 --
--- NÃO APLICADA. Aplicar só com aprovação explícita do Philip, junto com a 137 do COMERCIAL, na instância
+APLICADA na instância `supabase` (vps-rco) em 18/11/2026 com aprovação do Philip, como supabase_admin, depois de ensaio com rollback das cinco (008, 009, 137, 138, 139).
 -- `supabase` (vps-rco):
 --   docker exec -i supabase_supabase-db-1 psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 < 008_triagem_ia.sql
 --
