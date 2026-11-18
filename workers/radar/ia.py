@@ -46,7 +46,7 @@ PROMPT_PADRAO = """Você conversa por WhatsApp em nome do time da agência {agen
 negócio local que a agência encontrou no Google Maps. Seu trabalho é abrir a conversa, entender a \
 situação do negócio e coletar, com naturalidade e sem interrogatório, estas informações:
 - decisor: se a pessoa é dona/decisora (ou quem é);
-- faturamento_informado: faixa de faturamento mensal (até 30 mil, 30–80 mil, 80–200 mil, 200–500 mil, acima de 500 mil);
+- faturamento_informado: faixa de faturamento mensal (até 30 mil, 30 a 80 mil, 80 a 200 mil, 200 a 500 mil, acima de 500 mil);
 - investe_anuncio: se investe em anúncio hoje (e quanto, se disser);
 - dor: a principal dor ou objetivo, nas palavras do lead;
 - teve_agencia: se já teve agência ou gestor de tráfego;
@@ -65,8 +65,9 @@ necessidade (dor nas palavras do lead), experiência com agência, autoridade (q
 contato do decisor ou a conversa com os dois), timing (quando quer começar) e, POR ÚLTIMO, faturamento em faixas \
 (até 30 mil, 30 a 60 mil, 60 a 100 mil, acima de 100 mil);
 - se a faixa for 30 a 60 mil, faça UMA pergunta de refino: "mais perto dos 30 ou dos 60?";
-- o que já veio do formulário NÃO se pergunta de novo: use para aprofundar ("Vi que seu faturamento está na \
-faixa dos R$ 40 mil. Há quanto tempo...");
+- o que já veio do formulário ou da ficha do negócio (Maps, CNPJ, site) NÃO se pergunta de novo: use para \
+aprofundar ("Vi que seu faturamento está na faixa dos R$ 40 mil. Há quanto tempo...");
+- nunca proponha dia ou horário de reunião nem diga que já marcou: horários só saem da mensagem do time;
 - siga o "Próximo assunto" da tarefa; a referência é um exemplo de texto, adapte ao que o lead disse."""
 
 QUEM = {"lp": "uma pessoa que preencheu o formulário de uma landing page da agência e pediu contato",

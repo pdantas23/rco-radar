@@ -65,6 +65,10 @@ def preparar(conn, n_leads=3, intervalo=90, limite_hora=40, confirmado=True, ia_
     conn.execute("truncate radar.disparos_leads, radar.disparos, radar.abordagens, radar.conversas, radar.bloqueios cascade")
     conn.execute("truncate public.messages, public.conversations, public.agent_configs cascade")
     conn.execute("insert into public.agent_configs (agency_id, radar_agent_enabled) values (%s, %s)", (AGENCIA, ia_ligada))
+    # estes testes cobrem o fluxo antigo do Radar (intenção da IA decide): a agência tira 'radar' da triagem v2,
+    # que desde 18/11/2026 vale para o Radar por padrão (tests/test_triagem_v2.py cobre o padrão)
+    conn.execute("""insert into radar.config (agency_id, chave, valor) values (%s, 'triagem_regras', '{"origens": ["lp"]}')
+                    on conflict (agency_id, chave) do update set valor = excluded.valor""", (AGENCIA,))
     conn.execute("""insert into public.whatsapp_config (id, account_id) values (%s, %s) on conflict do nothing""",
                  (CONEXAO, CONTA_MESTRE))
     conn.execute("update radar.agencias set whatsapp_config_id = %s where agency_id = %s", (CONEXAO, AGENCIA))

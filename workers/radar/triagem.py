@@ -29,7 +29,9 @@ INDEFINIDOS = {"", "indefinido", "indefinida", "nao_sei", "none", "null"}
 
 # ── regras (radar.config 'triagem_regras') ───────────────────────────────
 REGRAS_PADRAO = {
-    "origens": ["lp"],                                   # onde a v2 vale; 'radar' entra quando a agência incluir
+    # onde a v2 vale. Padrão: LP e Radar (decisão de 18/11/2026: o Radar também qualifica pelo processo da Maria).
+    # A agência volta o Radar ao fluxo antigo com {"origens": ["lp"]}.
+    "origens": ["lp", "radar"],
     "faturamento": {"passa_min": 60000, "alerta_min": 50000},
     "cidades": {"opala": ["Teresina"], "proximas": ["Timon"]},
     "timing": {"passa": ["ate_30d", "30_60d"], "esteira": ["mais_60d", "so_pesquisando"]},
@@ -279,7 +281,7 @@ def avaliar(fatos: dict, r: dict, conversa_ativa: bool = True) -> Resultado:
                 return Resultado("desqualifica", "abaixo do porte mínimo da gestão de tráfego isolada: "
                                  + falhas[0].motivo, ps)
             alerta = "tráfego isolado: " + falhas[0].motivo
-            return Resultado("redireciona", "falhou só no porte do Opala → candidato a gestão de tráfego isolada ("
+            return Resultado("redireciona", "falhou só no porte do Opala: candidato a gestão de tráfego isolada ("
                              + falhas[0].motivo + ")", ps, alertas=[alerta])
         return Resultado("desqualifica", "falhou em: " + "; ".join(p.motivo for p in falhas), ps)
 
@@ -541,6 +543,10 @@ MENSAGENS_PADRAO = {
         "inicial": "Olá! Aqui é do time da {agencia}. Recebemos seu cadastro e queria entender um pouco melhor "
                    "o seu momento para te direcionar da forma certa. Posso te fazer umas perguntas rápidas?",
         "passar": "Perfeito, obrigado pelas respostas! Vou passar para alguém do time, que já te chama por aqui.",
+        # passa direto sem horário oferecido (agenda do Google desligada, SDR sem Google, sem horário livre, lead
+        # não quis nenhum dos 2 ou o agendamento falhou): sem promessa de dia/hora
+        "passar_sem_horario": "Perfeito, obrigado pelas respostas! Vou pedir para alguém do time te chamar para "
+                              "combinar o melhor horário.",
         "descartar": "Obrigado pelas respostas! Registrei tudo aqui e, se fizer sentido, o time entra em contato.",
         "oferta": "Perfeito, obrigado pelas respostas! Faz sentido você conversar com nosso consultor. Tenho estes "
                   "horários: {opcao_1} ou {opcao_2}. Qual fica melhor para você?",
@@ -568,6 +574,25 @@ def mensagem(conn, agency_id, origem: str, tipo: str, agencia: str, **vars) -> s
     for k, v in {"agencia": agencia, **vars}.items():
         texto = texto.replace("{" + k + "}", str(v))
     return texto
+
+
+def fatos_da_ficha(lead: dict, empresa: dict | None = None) -> dict:
+    """Radar: o que a ficha do negócio (Maps/CNPJ) já diz e vale como fato da triagem, para a IA não perguntar de
+    novo. Só dado objetivo: cidade do Maps, segmento (nicho ou categoria do Maps) e ano de abertura do CNPJ
+    escolhido. Faturamento estimado NÃO entra (é estimativa do sistema; a faixa é perguntada ao lead, por último).
+    O que o lead disser na conversa substitui (juntar_fatos com os fatos da conversa por cima)."""
+    fatos: dict = {}
+    cidade = (lead or {}).get("cidade")
+    if conhecido(cidade):
+        fatos["cidade"] = str(cidade).strip()
+    segmento = (lead or {}).get("nicho") or (lead or {}).get("categoria")
+    if conhecido(segmento):
+        fatos["segmento"] = str(segmento).strip()
+    abertura = (empresa or {}).get("abertura")
+    if abertura:
+        ano = getattr(abertura, "year", None) or str(abertura)[:4]
+        fatos["tempo_mercado"] = f"CNPJ aberto em {ano}"
+    return fatos
 
 
 def ficha_lp(contexto: dict) -> str:
@@ -633,8 +658,8 @@ def resumo_sdr(pessoa: dict, fatos: dict, res: Resultado | None, link: str | Non
     if conhecido(fatos.get("assuntos_comerciais")):
         linhas.append(f"Perguntou sobre (o consultor trata): {_v(fatos, 'assuntos_comerciais')}")
     if res is not None:
-        linhas.append(f"Classificação: {ROTULO_CLASSIFICACAO.get(res.classificacao, res.classificacao)} — "
-                      f"{res.justificativa}")
+        linhas.append(f"Classificação: {ROTULO_CLASSIFICACAO.get(res.classificacao, res.classificacao)}. "
+                      f"Motivo: {res.justificativa}")
         if res.alertas:
             linhas.append("Alertas: " + "; ".join(res.alertas))
     linhas.append(f"Conversa: {link or 'não disponível'}")

@@ -13,11 +13,14 @@ Triagem IA (docs/triagem-ia.md): conversa de LP (origem 'lp', sem radar.leads) a
 COMERCIAL recebe a 1ª mensagem automaticamente (a integração marcada para triagem é a autorização), com
 a mesma janela, limites e trava; o registro prévio fica em conversas.contexto.primeira.
 
-Triagem v2 (seção v2 do contrato; vale para as origens em radar.config 'triagem_regras'.origens, padrão só 'lp'):
+Triagem v2 (seção v2 do contrato; vale para as origens em radar.config 'triagem_regras'.origens, padrão LP e Radar):
 a cada resposta a decisão sai dos portões de radar.triagem (fatos da IA + regras da agência), não da IA:
 passa_direto (oferece 2 horários do Google do SDR → agenda → passa), passa_alerta/redireciona (passa com alerta,
 sem horário), esteira (30/60/90 dias) ou desqualifica. Sem resposta: cadência de 5 toques só seg-sex 9h-18h no
-fuso da agência. Fora da v2 (Radar, por padrão) vale o fluxo antigo: a intenção da IA decide.
+fuso da agência. No Radar a 1ª mensagem continua sendo a abordagem do disparo (toque 1) e a ficha do negócio
+(Maps/CNPJ/site) entra como fatos já conhecidos. Agência que tira 'radar' das origens volta ao fluxo antigo (a
+intenção da IA decide). Agenda: só oferece horário se o COMERCIAL devolver 2 opções (/horarios); sem Google
+configurado ou sem SDR conectado, passa ao SDR com "passar_sem_horario", sem prometer dia nem hora.
 """
 
 import json
@@ -98,6 +101,49 @@ def preencher(texto: str, lead: dict) -> str:
     return texto
 
 
+def _empresa(conn, lead_id) -> dict | None:
+    """CNPJ escolhido do lead (confiança >= 50), se houver."""
+    return _cur(conn).execute(
+        """select razao_social, nome_fantasia, abertura, porte, cnae_descricao, qtd_socios from radar.empresas
+           where lead_id = %s and escolhido limit 1""", (lead_id,)).fetchone()
+
+
+def _ficha_v2(conn, lead: dict) -> str:
+    """Triagem v2 no Radar: tudo o que a ficha já sabe do negócio, para a IA não perguntar de novo. Sem o
+    faturamento estimado (estimativa do sistema: a faixa é perguntada ao lead, por último)."""
+    linhas = [f"Negócio: {lead['nome']}",
+              f"Segmento (Google Maps): {lead.get('nicho') or lead.get('categoria') or 'não informado'}",
+              f"Cidade: {lead.get('cidade') or 'não informada'}" + (f"-{lead['estado']}" if lead.get("estado") else ""),
+              f"Endereço: {lead.get('endereco') or 'não informado'}"]
+    if lead.get("nota"):
+        linhas.append(f"Google: nota {lead['nota']} com {lead.get('qtd_avaliacoes') or 0} avaliações")
+    if lead.get("site"):
+        linhas.append(f"Site: {lead['site']}")
+    pres = _cur(conn).execute("""select instagram_user, seguidores from radar.presenca where lead_id = %s
+                                 order by coletado_em desc, id desc limit 1""", (lead["id"],)).fetchone()
+    if pres and pres["instagram_user"]:
+        linhas.append(f"Instagram: @{pres['instagram_user']}"
+                      + (f" ({pres['seguidores']} seguidores)" if pres["seguidores"] is not None else ""))
+    if lead.get("presenca_digital") and lead["presenca_digital"] != "nao_verificado":
+        linhas.append(f"Presença digital: {lead['presenca_digital']}")
+    if lead.get("anuncio_ativo") in ("sim", "nao"):
+        linhas.append(f"Anúncio ativo na Meta: {lead['anuncio_ativo']}")
+    emp = _empresa(conn, lead["id"])
+    if emp:
+        partes = [emp["razao_social"] or emp["nome_fantasia"] or "",
+                  f"aberto em {emp['abertura'].year}" if emp["abertura"] else "",
+                  f"porte {emp['porte']}" if emp["porte"] else "", emp["cnae_descricao"] or "",
+                  f"{emp['qtd_socios']} sócio(s)" if emp["qtd_socios"] else ""]
+        linhas.append("CNPJ: " + ", ".join(p for p in partes if p))
+    aval = [r[0] for r in conn.execute("""select texto from radar.avaliacoes where lead_id = %s
+                                          order by data desc nulls last limit 3""", (lead["id"],))]
+    if aval:
+        linhas.append("Avaliações recentes: " + " | ".join(a[:200] for a in aval))
+    linhas.append("Esses dados são públicos e já conhecidos: NÃO pergunte de novo (ex.: a cidade e o segmento); "
+                  "use para aprofundar. A conversa começou pela mensagem de abordagem do time.")
+    return "\n".join(linhas)
+
+
 def _ficha(conn, lead: dict) -> str:
     aval = [r[0] for r in conn.execute("""select texto from radar.avaliacoes where lead_id = %s
                                           order by data desc nulls last limit 3""", (lead["id"],))]
@@ -133,6 +179,9 @@ async def _despachar_radar(conn, comercial: Comercial, agora: datetime) -> int:
         inicio, fim = cfg.get("janela_inicio") or JANELA_PADRAO[0], cfg.get("janela_fim") or JANELA_PADRAO[1]
         if not (inicio <= local.time() < fim):
             continue
+        if _regras_v2(conn, {"agency_id": d["agency_id"], "origem": "radar"}) is not None and not triagem.na_janela(
+                agora, _fuso(cfg), triagem.cadencia(conn, d["agency_id"])["janela"]):
+            continue                                # v2: toque 1 (a abordagem) também só seg-sex 9h-18h
         conexao = d["whatsapp_config_id"] or cfg.get("whatsapp_config_id")
         if conexao is None:
             log.warning("disparo %s sem conexão de WhatsApp (nem no disparo nem na Configuração do Radar)", d["id"])
@@ -495,7 +544,7 @@ async def _chamar_ia(conn, comercial, c, lead, cfg_ag, agora, cliente_ia, ultima
     None. `v2` = (regras, fatos) na triagem v2 (o resumo ao SDR sai completo), None no fluxo antigo."""
     cfg = ia.carregar_config(conn, c["agency_id"])
     lp = c["origem"] == "lp"
-    ficha = triagem.ficha_lp(c["contexto"]) if lp else _ficha(conn, lead)
+    ficha = triagem.ficha_lp(c["contexto"]) if lp else (_ficha_v2(conn, lead) if v2 is not None else _ficha(conn, lead))
     try:
         ia.checar_orcamento(conn, cfg, c["agency_id"], agora)      # acima do teto o modelo nem é chamado
         resp, custo = await ia.responder(cfg, cfg_ag.get("nome_agencia") or "agência", ficha,
@@ -567,6 +616,10 @@ async def _tratar_v2(conn, comercial, c, agora, cliente_ia, ultima, lead, cfg_ag
     fuso = _fuso(cfg_ag)
     cad = triagem.cadencia(conn, c["agency_id"])
     fatos = dict(((c["nota_detalhe"] or {}).get("fatos")) or {})
+    if not lp:
+        # Radar: o que a ficha já sabe (cidade do Maps, segmento, abertura do CNPJ) entra como fato conhecido;
+        # o que o lead disse na conversa vale por cima
+        fatos = triagem.juntar_fatos(triagem.fatos_da_ficha(lead, _empresa(conn, lead["id"])), fatos)
     etapa = c["etapa"]
     toque = None
 
@@ -653,7 +706,7 @@ async def _tratar_v2(conn, comercial, c, agora, cliente_ia, ultima, lead, cfg_ag
         return
     if etapa == "oferta" and do_lead and resp.escolha_horario == "nenhuma":
         if await _enviar(conn, comercial, c, lead, cfg_ag, agora,
-                         triagem.mensagem(conn, c["agency_id"], c["origem"], "passar", nome), campos, ultima, fatos):
+                         triagem.mensagem(conn, c["agency_id"], c["origem"], "passar_sem_horario", nome), campos, ultima, fatos):
             await _passar_v2(conn, comercial, c, lead, fatos, res, classificacao="passa_direto",
                              extras=["Agenda: nenhum dos 2 horários oferecidos serviu ao lead; combinar outro."],
                              resumo_ia=resp.resumo)
@@ -725,7 +778,7 @@ async def _oferecer(conn, comercial, c, lead, cfg_ag, agora, fatos, res, campos,
     if not (h.get("ok") and h.get("sdr_id") and len(opcoes) >= 2):
         motivo = h.get("motivo") or "sem_horario"
         if await _enviar(conn, comercial, c, lead, cfg_ag, agora,
-                         triagem.mensagem(conn, c["agency_id"], c["origem"], "passar", nome), campos, ultima, fatos):
+                         triagem.mensagem(conn, c["agency_id"], c["origem"], "passar_sem_horario", nome), campos, ultima, fatos):
             await _passar_v2(conn, comercial, c, lead, fatos, res, classificacao="passa_direto",
                              extras=[f"Agenda: horário não oferecido ({motivo}); combinar com o lead."],
                              resumo_ia=resumo_ia)
@@ -770,7 +823,7 @@ async def _agendar(conn, comercial, c, lead, cfg_ag, agora, fatos, res, campos, 
                         tentativas=agenda.get("tentativas", 1))
         return
     if await _enviar(conn, comercial, c, lead, cfg_ag, agora,
-                     triagem.mensagem(conn, c["agency_id"], c["origem"], "passar", nome), campos, ultima, fatos):
+                     triagem.mensagem(conn, c["agency_id"], c["origem"], "passar_sem_horario", nome), campos, ultima, fatos):
         await _passar_v2(conn, comercial, c, lead, fatos, res, classificacao="passa_direto",
                          extras=[f"Agenda: o lead escolheu {op['rotulo']}, mas não deu para agendar "
                                  f"({a.get('motivo') or 'erro'}); combinar com o lead."])

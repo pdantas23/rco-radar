@@ -81,3 +81,85 @@ def test_esquema_estrito_sem_referencias():
     texto = json.dumps(ia.ESQUEMA_RESPOSTA)
     assert "$ref" not in texto and "$defs" not in texto
     assert set(ia.ESQUEMA_RESPOSTA["properties"]["campos"]["required"]) == set(ia.CamposColetados.model_fields)
+
+
+# ── triagem v2 pelo OpenRouter (merge da feat/triagem-ia, 18/11/2026) ────
+def _todos_os_nos(n, caminho="$"):
+    if isinstance(n, dict):
+        yield caminho, n
+        for k, v in n.items():
+            yield from _todos_os_nos(v, f"{caminho}.{k}")
+    elif isinstance(n, list):
+        for i, v in enumerate(n):
+            yield from _todos_os_nos(v, f"{caminho}[{i}]")
+
+
+def test_esquema_v2_no_formato_estrito_do_openrouter():
+    sch = ia.ESQUEMA_RESPOSTA
+    assert set(sch["required"]) == {"mensagem", "campos", "fatos", "intencao", "escolha_horario", "resumo"}
+    assert set(sch["properties"]["fatos"]["required"]) == set(ia.Fatos.model_fields)
+    for caminho, n in _todos_os_nos(sch):
+        assert not {"$ref", "$defs", "anyOf", "oneOf", "allOf", "default", "title"} & set(n), caminho
+        if n.get("type") == "object":
+            assert n["additionalProperties"] is False and set(n["required"]) == set(n["properties"]), caminho
+    # opcional = união de tipos com null (sem anyOf)
+    assert sch["properties"]["fatos"]["properties"]["faturamento_valor"]["type"] == ["number", "null"]
+    assert all(p["type"] == ["string", "null"] for p in sch["properties"]["campos"]["properties"].values())
+    assert sch["properties"]["escolha_horario"]["enum"] == ["opcao_1", "opcao_2", "nenhuma", "indefinido"]
+
+
+def test_schema_estrito_recusa_uniao_que_o_openrouter_nao_aceitaria():
+    from pydantic import BaseModel
+
+    class Ruim(BaseModel):
+        x: int | str
+
+    with pytest.raises(ValueError, match="união não suportada"):
+        ia.schema_estrito(Ruim)
+
+
+RESPOSTA_V2 = {
+    "mensagem": "E vocês investem em anúncio hoje?",
+    "campos": {k: None for k in ia.CamposColetados.model_fields},
+    "fatos": {**{k: "" for k in ("segmento", "tempo_mercado", "como_atrai_clientes", "valor_anuncio", "dor",
+                                  "contato_decisor", "cidade", "experiencia_agencia")},
+              **{k: "indefinido" for k in ("investe_anuncio", "necessidade_clara", "decisor", "prazo_inicio",
+                                            "faixa_faturamento", "faixa_refino", "ve_marketing_como_despesa",
+                                            "orcamento_ou_intencao", "pede_algo_fora")},
+              "segmento": "Barbearia", "decisor": "dono_socio", "faturamento_valor": None,
+              "objecoes": [], "assuntos_comerciais": ["preco"]},
+    "intencao": "continuar",
+    "escolha_horario": "indefinido",
+    "resumo": "Dono da barbearia.",
+}
+
+
+@respx.mock
+async def test_triagem_v2_pelo_openrouter_devolve_fatos_e_usa_o_prompt_v2():
+    assert set(RESPOSTA_V2["fatos"]) == set(ia.Fatos.model_fields)          # resposta completa, como o strict exige
+    rota = respx.post(ia.OPENROUTER_URL).mock(return_value=_ok(json.dumps(RESPOSTA_V2), custo=0.0004))
+    async with httpx.AsyncClient() as http:
+        r, custo = await ia.responder(CFG, "RCO HUB", "Negócio: Barbearia 0", [("lead", "Sou o dono")],
+                                      "Próximo assunto: marketing.", http=http, origem="radar", v2=True)
+    assert r.fatos.decisor == "dono_socio" and r.fatos.assuntos_comerciais == ["preco"]
+    assert r.fatos.faturamento_valor is None and r.escolha_horario == "indefinido"
+    assert custo == round(0.0004 * ia.DOLAR, 6)
+    corpo = json.loads(rota.calls[0].request.content)
+    assert corpo["response_format"]["json_schema"]["schema"] == ia.ESQUEMA_RESPOSTA
+    assert "seguindo um roteiro" in corpo["messages"][0]["content"]
+    assert "Próximo assunto: marketing." in corpo["messages"][-1]["content"]
+    assert rota.calls[0].request.headers["x-title"] == "RCO Radar"
+
+
+@respx.mock
+async def test_rede_fora_tenta_de_novo_e_402_vai_para_humano():
+    respx.post(ia.OPENROUTER_URL).mock(side_effect=[httpx.ConnectError("sem rede"),
+                                                    httpx.Response(402, json={"error": {"message": "sem créditos"}}),
+                                                    httpx.Response(200, text="<html>")])
+    async with httpx.AsyncClient() as http:
+        with pytest.raises(RuntimeError, match="fora do ar"):
+            await ia.responder(CFG, "A", "f", [("lead", "oi")], http=http, v2=True)
+        with pytest.raises(ia.IAIndisponivel, match="402"):
+            await ia.responder(CFG, "A", "f", [("lead", "oi")], http=http, v2=True)
+        with pytest.raises(ia.IAIndisponivel, match="formato"):
+            await ia.responder(CFG, "A", "f", [("lead", "oi")], http=http, v2=True)

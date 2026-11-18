@@ -333,7 +333,7 @@ def test_resumo_ao_sdr_tem_todos_os_campos():
                    "Dor/objetivo (palavras do lead): agenda vazia", "Decisor: dono_socio",
                    "Quando quer começar: ate_30d", "Experiência com agência: nunca teve",
                    "Objeções: já teve agência ruim", "Perguntou sobre (o consultor trata): preco",
-                   "Classificação: Passa direto — todos os portões ok", "Conversa: http://c/inbox?c=1",
+                   "Classificação: Passa direto. Motivo: todos os portões ok", "Conversa: http://c/inbox?c=1",
                    "Horário escolhido: quarta (21/10) às 10h", "Resumo da IA: Lead animada."):
         assert trecho in txt, trecho
 
@@ -466,7 +466,10 @@ async def test_horario_ocupado_duas_vezes_passa_sem_agendar(conn):
 async def test_sem_google_ou_sem_horario_passa_sem_oferecer(conn, horarios, motivo):
     cid, com = await lp_contatada(conn, horarios=[horarios])
     await responde(conn, com, cid, "Tudo certo", AGORA + timedelta(minutes=2), resp(**TODOS_OK))
-    assert com.de("agendar") == [] and textos(com)[-1] == triagem.MENSAGENS_PADRAO["lp"]["passar"]
+    # sem oferta: nenhum dia/hora é prometido; a mensagem diz que o time chama para combinar
+    assert com.de("agendar") == [] and textos(com)[-1] == triagem.MENSAGENS_PADRAO["lp"]["passar_sem_horario"]
+    assert "combinar o melhor horário" in textos(com)[-1]
+    assert all(o["rotulo"] not in t for o in OPCOES for t in textos(com))
     [p] = com.de("passar")
     assert (p["classificacao"], p["agendamento"]) == ("passa_direto", None)
     assert f"horário não oferecido ({motivo}" in p["resumo"] and "Horário escolhido: nenhum" in p["resumo"]
@@ -700,3 +703,194 @@ async def test_radar_entra_na_v2_quando_a_agencia_inclui(conn):
     st, txt = conn.execute("select status, motivo_descarte_texto from radar.leads").fetchone()
     assert st == "descartado" and "vê marketing como despesa" in txt
     assert conn.execute("select decisao, motivo_fim from radar.conversas").fetchone() == ("desqualifica", "desqualificado")
+
+
+# ── Radar na v2 por padrão (18/11/2026) ──────────────────────────────────
+def test_v2_vale_para_lp_e_radar_por_padrao():
+    assert R["origens"] == ["lp", "radar"]
+    assert triagem.v2_ativa(R, "radar") and triagem.v2_ativa(R, "lp")
+    assert not triagem.v2_ativa({**R, "origens": ["lp"]}, "radar")
+
+
+def test_regras_da_agencia_tiram_o_radar_da_v2(conn):
+    assert triagem.v2_ativa(triagem.regras(conn, AGENCIA), "radar")                     # sem config: padrão
+    conn.execute("""insert into radar.config (agency_id, chave, valor) values (%s, 'triagem_regras', %s::jsonb)""",
+                 (AGENCIA, json.dumps({"origens": ["lp"]})))
+    assert not triagem.v2_ativa(triagem.regras(conn, AGENCIA), "radar")
+    assert triagem.v2_ativa(triagem.regras(conn, AGENCIA), "lp")
+
+
+def test_fatos_da_ficha_so_dado_objetivo():
+    from datetime import date
+    lead = {"cidade": "Teresina", "categoria": "Barbearia", "nicho": None, "faturamento_estimado_faixa": "80k_200k"}
+    assert triagem.fatos_da_ficha(lead, {"abertura": date(2015, 3, 1)}) == {
+        "cidade": "Teresina", "segmento": "Barbearia", "tempo_mercado": "CNPJ aberto em 2015"}
+    assert triagem.fatos_da_ficha({"cidade": "", "categoria": None}) == {}
+    # o que o lead disser na conversa vale por cima da ficha
+    assert triagem.juntar_fatos(triagem.fatos_da_ficha(lead), {"cidade": "Timon"})["cidade"] == "Timon"
+
+
+def test_prompt_v2_nao_deixa_a_ia_propor_horario_nem_repetir_a_ficha():
+    s = ia.montar_sistema("RCO HUB", None, origem="radar", v2=True)
+    assert "nunca proponha dia ou horário de reunião" in s
+    assert "ficha do negócio (Maps, CNPJ, site) NÃO se pergunta de novo" in s
+    assert "encontrou no Google Maps" in s and "—" not in s and "–" not in s
+
+
+class ComercialRadar:
+    """FakeComercial do fluxo do Radar + rotas de agenda (respostas fixas)."""
+
+    url = "http://comercial"
+
+    def __init__(self, conn, horarios=None):
+        from tests.test_conversa import FakeComercial
+        self.base = FakeComercial(conn)
+        self.envios, self.passagens = self.base.envios, self.base.passagens
+        self.h = horarios or {"ok": False, "motivo": "sem_google"}
+        self.pedidos, self.agendamentos = [], []
+
+    async def enviar(self, **kw):
+        return await self.base.enviar(**kw)
+
+    async def passar(self, **kw):
+        return await self.base.passar(**kw)
+
+    async def horarios(self, **kw):
+        self.pedidos.append(kw)
+        return self.h
+
+    async def agendar(self, **kw):
+        self.agendamentos.append(kw)
+        return {"ok": True, "evento_id": "ev", "lead_call_id": "lc"}
+
+
+def preparar_radar_v2(conn):
+    """Lead do Radar com ficha (categoria do Maps, CNPJ escolhido aberto em 2015) e a agência SEM opt-out."""
+    from tests.test_conversa import preparar
+    leads, _ = preparar(conn, n_leads=1)
+    conn.execute("delete from radar.config where chave = 'triagem_regras'")             # volta ao padrão
+    conn.execute("update radar.leads set categoria = 'Barbearia' where id = %s", (leads[0],))
+    conn.execute("""insert into radar.empresas (agency_id, lead_id, escolhido, cnpj, razao_social, abertura, porte,
+                        confianca_cnpj, motivo_confianca, fonte)
+                    values (%s, %s, true, '11111111000111', 'BARBEARIA ZERO LTDA', '2015-03-01', 'ME', 80, 't', 't')""",
+                 (AGENCIA, leads[0]))
+    return leads[0]
+
+
+async def test_radar_usa_v2_por_padrao_com_a_abordagem_como_toque_1_e_a_ficha_como_fatos(conn):
+    from tests.test_conversa import lead_responde
+    lead = preparar_radar_v2(conn)
+    com = ComercialRadar(conn)
+    assert await conversa.despachar(conn, com, AGORA) == 1
+    # toque 1 = a abordagem da agência (não um texto da triagem); toque 2 da cadência v2 em +2 h
+    assert com.envios[0]["texto"] == "Oi, falo com o responsável pela Barbearia 0? Vi que vocês têm nota 4,6 no Google."
+    assert conn.execute("select proximo_followup_em from radar.conversas").fetchone()[0] == AGORA + timedelta(hours=2)
+    lead_responde(conn, lead, "Sou eu, pode falar", AGORA + timedelta(minutes=2))
+    fake = FakeIA(resp("Legal! Hoje como os clientes chegam até vocês?", decisor="dono_socio"))
+    await conversa.conversar(conn, com, AGORA + timedelta(minutes=3), cliente_ia=fake)
+    ch = fake.chamadas[0]
+    assert "seguindo um roteiro" in ch["system"] and "encontrou no Google Maps" in ch["system"]
+    ficha = ch["messages"][0]["content"]
+    assert "Cidade: Teresina-PI" in ficha and "BARBEARIA ZERO LTDA" in ficha and "aberto em 2015" in ficha
+    assert "NÃO pergunte de novo" in ficha and "faturamento estimado" not in ficha.lower()
+    tarefa = ch["messages"][-1]["content"]
+    assert "cidade: Teresina" in tarefa and "segmento: Barbearia" in tarefa and "CNPJ aberto em 2015" in tarefa
+    assert "Próximo assunto: marketing" in tarefa                    # nem situação nem cidade: a ficha já disse
+    assert com.envios[-1]["texto"] == "Legal! Hoje como os clientes chegam até vocês?"
+    c = conn.execute("select decisao, nota_detalhe from radar.conversas").fetchone()
+    assert c[0] == "em_andamento" and c[1]["fatos"]["cidade"] == "Teresina" and c[1]["fatos"]["decisor"] == "dono_socio"
+    assert conn.execute("select status from radar.leads").fetchone()[0] == "respondeu"
+
+
+SEM_CIDADE = {k: v for k, v in TODOS_OK.items() if k not in ("cidade", "segmento")}
+
+
+@pytest.mark.parametrize("horarios", [{"ok": False, "motivo": "sem_google"}, {"ok": False, "motivo": "sem_sdr"}])
+async def test_radar_passa_direto_sem_google_passa_ao_sdr_sem_oferecer_horario(conn, horarios):
+    from tests.test_conversa import lead_responde
+    lead = preparar_radar_v2(conn)
+    com = ComercialRadar(conn, horarios)
+    await conversa.despachar(conn, com, AGORA)
+    lead_responde(conn, lead, "Sou o dono, faturo 80 mil, quero começar já", AGORA + timedelta(minutes=2))
+    # a IA não repete a cidade: o portão de cidade usa a do Maps (Teresina) e passa direto
+    await conversa.conversar(conn, com, AGORA + timedelta(minutes=3), cliente_ia=FakeIA(resp(**SEM_CIDADE)))
+    [pedido] = com.pedidos
+    assert pedido["lead_id"] == lead and com.agendamentos == []
+    assert com.envios[-1]["texto"] == triagem.MENSAGENS_PADRAO["lp"]["passar_sem_horario"]
+    assert "—" not in com.envios[-1]["texto"] and "–" not in com.envios[-1]["texto"]
+    [p] = com.passagens
+    assert (p["lead_id"], p["motivo"], p["classificacao"], p["agendamento"]) == (lead, "qualificado", "passa_direto", None)
+    assert "Cidade: Teresina" in p["resumo"] and "Empresa: Barbearia 0" in p["resumo"]
+    assert f"horário não oferecido ({horarios['motivo']})" in p["resumo"]
+    assert conn.execute("select status from radar.leads").fetchone()[0] == "qualificado"
+    assert conn.execute("select estado, decisao from radar.conversas").fetchone() == ("humano", "passa_direto")
+
+
+async def test_radar_com_google_oferece_os_2_horarios_do_comercial(conn):
+    from tests.test_conversa import lead_responde
+    lead = preparar_radar_v2(conn)
+    com = ComercialRadar(conn, {"ok": True, "sdr_id": SDR, "opcoes": OPCOES})
+    await conversa.despachar(conn, com, AGORA)
+    lead_responde(conn, lead, "Tudo certo", AGORA + timedelta(minutes=2))
+    await conversa.conversar(conn, com, AGORA + timedelta(minutes=3), cliente_ia=FakeIA(resp(**SEM_CIDADE)))
+    assert OPCOES[0]["rotulo"] in com.envios[-1]["texto"] and OPCOES[1]["rotulo"] in com.envios[-1]["texto"]
+    assert com.passagens == [] and conn.execute("select etapa from radar.conversas").fetchone()[0] == "oferta"
+
+
+SABADO = datetime(2026, 10, 24, 13, 0, tzinfo=timezone.utc)                           # 10h em São Paulo
+
+
+async def test_radar_v2_toque_1_so_em_dia_util(conn):
+    preparar_radar_v2(conn)
+    com = ComercialRadar(conn)
+    assert await conversa.despachar(conn, com, SABADO) == 0                             # v2: só seg-sex 9h-18h
+    assert await conversa.despachar(conn, com, SABADO + timedelta(days=2)) == 1         # segunda 10h
+
+
+async def test_radar_fora_da_v2_quando_a_agencia_tira_volta_ao_fluxo_antigo(conn):
+    from tests.test_conversa import lead_responde
+    sabado = SABADO
+    lead = preparar_radar_v2(conn)
+    conn.execute("""insert into radar.config (agency_id, chave, valor) values (%s, 'triagem_regras', %s::jsonb)""",
+                 (AGENCIA, json.dumps({"origens": ["lp"]})))
+    com = ComercialRadar(conn)
+    assert await conversa.despachar(conn, com, sabado) == 1
+    lead_responde(conn, lead, "Oi", sabado + timedelta(minutes=2))
+    from tests.test_conversa import resposta
+    fake = FakeIA(resposta())
+    await conversa.conversar(conn, com, sabado + timedelta(minutes=3), cliente_ia=fake)
+    assert "seguindo um roteiro" not in fake.chamadas[0]["system"]
+    assert "Próximo assunto" not in fake.chamadas[0]["messages"][-1]["content"]
+
+
+async def test_radar_v2_pelo_openrouter_da_agencia(conn, monkeypatch):
+    """O caminho da conversa do Radar na v2 chama o OpenRouter (provedor da config) com o esquema estrito v2."""
+    from radar.chaves import cifrar
+    from tests.test_conversa import lead_responde
+    chave = "ab" * 32
+    monkeypatch.setenv("ENCRYPTION_KEY", chave)
+    lead = preparar_radar_v2(conn)
+    conn.execute("""update public.agent_configs set radar_agent_provider = 'openrouter',
+                        radar_agent_model = 'openai/gpt-5.6-luna' where agency_id = %s""", (AGENCIA,))
+    conn.execute("insert into public.agent_provider_keys (agency_id, provider, api_key_encrypted) values (%s, 'openrouter', %s)",
+                 (AGENCIA, cifrar("sk-or-teste", chave)))
+    com = ComercialRadar(conn)
+    await conversa.despachar(conn, com, AGORA)
+    lead_responde(conn, lead, "Sou o dono", AGORA + timedelta(minutes=2))
+    chamadas = []
+
+    def handler(req):
+        chamadas.append(json.loads(req.content))
+        conteudo = resp("Hoje como os clientes chegam até vocês?", decisor="dono_socio").model_dump_json()
+        return httpx.Response(200, json={"choices": [{"message": {"content": conteudo}}],
+                                         "usage": {"prompt_tokens": 900, "completion_tokens": 90, "cost": 0.0003}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        await conversa.conversar(conn, com, AGORA + timedelta(minutes=3), cliente_ia=http)
+    [corpo] = chamadas
+    assert corpo["model"] == "openai/gpt-5.6-luna"
+    assert corpo["response_format"]["json_schema"]["schema"] == ia.ESQUEMA_RESPOSTA
+    assert "Próximo assunto: marketing" in corpo["messages"][-1]["content"]
+    assert com.envios[-1]["texto"] == "Hoje como os clientes chegam até vocês?"
+    valor = conn.execute("select valor from radar.custos_api where fonte = 'ia_radar'").fetchone()[0]
+    assert float(valor) == pytest.approx(0.0003 * ia.DOLAR)

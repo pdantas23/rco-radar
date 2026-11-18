@@ -215,7 +215,7 @@ Migration `009_triagem_v2.sql` (só arquivo): `etapa`, `cadencia_inicio`, `estei
 `agenda` em `radar.conversas` e o CHECK de `decisao` com as saídas novas.
 
 Config por agência em `radar.config` (chave ausente/valor inválido = padrão):
-- `triagem_regras`: `{origens: ["lp"], faturamento: {passa_min: 60000, alerta_min: 50000},
+- `triagem_regras`: `{origens: ["lp", "radar"], faturamento: {passa_min: 60000, alerta_min: 50000},
   cidades: {opala: ["Teresina"], proximas: ["Timon"]}, timing: {passa: [...], esteira: [...]},
   trafego_isolado_porte_min: null}`;
 - `triagem_cadencia`: `{toques: [{apos_horas: 0, tipo: "inicial"}, {2, "retoma"}, {24, "pergunta_facil"},
@@ -223,12 +223,13 @@ Config por agência em `radar.config` (chave ausente/valor inválido = padrão):
   fim: "18:00"}, esteira: {intervalo_dias: 30, mensagens: 3, espera_final_dias: 7}, tipos: {<tipo>: instrução}}`;
 - `triagem_roteiro`: `{<etapa>: texto de referência}` (situacao, cidade, marketing, necessidade,
   experiencia_agencia, autoridade, contato_decisor, timing, faturamento, refino);
-- `triagem_mensagens`: textos fixos `inicial`, `passar`, `descartar`, `oferta`, `oferta_nova`, `confirmacao`, `esteira`.
+- `triagem_mensagens`: textos fixos `inicial`, `passar`, `passar_sem_horario`, `descartar`, `oferta`, `oferta_nova`,
+  `confirmacao`, `esteira`.
 Todos os textos padrão são EXEMPLO até a Maria/Miguel fecharem os scripts.
 
 Escolhas (revisar com o Philip):
-1. **Onde vale a v2**: `triagem_regras.origens`, padrão só `lp`. Leads do Radar (prospecção fria) seguem o fluxo
-   antigo (intenção da IA + `triagem_followups`) até a agência incluir `radar`.
+1. **Onde vale a v2**: `triagem_regras.origens`. Padrão desde 18/11 (merge na main): `lp` e `radar`. A agência
+   volta o Radar ao fluxo antigo (intenção da IA + `triagem_followups`) com `{"origens": ["lp"]}`.
 2. **`radar.criterios_triagem` (008) não é mais lido** pelo worker; a aba "Triagem IA" do COMERCIAL (93ffa99), que
    edita critérios e pesos, fica sem efeito até ser trocada por regras/textos da v2.
 3. **Mais de um alerta**: o contrato diz "exatamente um portão em alerta". Com 2+ alertas o lead também passa com
@@ -259,3 +260,19 @@ Escolhas (revisar com o Philip):
 A definir: porte mínimo da gestão de tráfego isolada (`trafego_isolado_porte_min`); lista de cidades próximas
 (hoje só Timon); scripts de referência (roteiro, toques, esteira, mensagens); LP que termina "sem resposta" ou
 na esteira sem ninguém do time ver (pendência já registrada).
+
+### Integração na main (18/11/2026)
+- **Radar na v2 por padrão.** A 1ª mensagem continua sendo a abordagem do disparo (toque 1, aprovado por humano) e,
+  na v2, também só sai seg-sex 9h-18h. A ficha do negócio entra na conversa (`conversa._ficha_v2`: segmento e cidade
+  do Maps, endereço, nota, site, Instagram, anúncio, CNPJ escolhido) e vira fato conhecido (`triagem.fatos_da_ficha`:
+  cidade, segmento, ano de abertura do CNPJ), então a IA não pergunta de novo e o portão de cidade usa a do Maps.
+  Faturamento estimado não entra (a faixa é perguntada ao lead, por último). O que o lead disser substitui a ficha.
+- **IA pelo OpenRouter** em todo caminho da v2 (resposta, toques, esteira): `ia.ESQUEMA_RESPOSTA` = `schema_estrito(RespostaIA)`
+  (fatos e escolha_horario incluídos; sem $ref/$defs/anyOf; opcional como `["tipo", "null"]`). 429/5xx/rede =
+  retentativa; outro 4xx ou formato errado = humano. Custo: `usage.cost`; sem ele, a tabela.
+- **Agenda desligada até haver credencial.** O COMERCIAL devolve `sem_google` no `/horarios` sem
+  `GOOGLE_OAUTH_CLIENT_ID/SECRET` (ou sem SDR conectado); o worker não oferece horário e manda `passar_sem_horario`
+  ("Vou pedir para alguém do time te chamar para combinar o melhor horário."), passando ao SDR com o resumo. O mesmo
+  texto vale quando nenhum horário serve ou o agendamento falha. O prompt v2 proíbe a IA de propor dia/hora.
+- Resumo ao SDR sem travessão: "Classificação: Passa direto. Motivo: ...".
+
