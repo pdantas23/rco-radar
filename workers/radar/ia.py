@@ -11,18 +11,25 @@ Regras fixas, que as instruções da agência não sobrescrevem:
   que é o assistente do time e oferecer uma pessoa do time.
 """
 
+import json
 import os
 from dataclasses import dataclass
 from typing import Literal
 
 import anthropic
-from pydantic import BaseModel, Field
+import httpx
+from pydantic import BaseModel, Field, ValidationError
 
 from radar import custo_zero
 from radar.chaves import decifrar
 
 DOLAR = float(os.environ.get("RADAR_DOLAR_BRL", "5.04"))
 MODELO_PADRAO = "claude-opus-5-5"
+# OpenRouter (decisão do Philip, 04/11 e 17/11/2026: IA dos clientes só via OpenRouter). Modelo vem da config da
+# agência (lista do COMERCIAL em src/lib/agent-providers.ts); sem modelo, o primeiro da lista.
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_MODELO_PADRAO = "openai/gpt-5.6-luna"
+PROVEDORES = ("anthropic", "openrouter")
 # US$ por milhão de tokens (entrada, saída) — tabela da Anthropic em 06/10/2026
 PRECOS_USD = {
     "claude-opus-5-5": (4.0, 20.0),
@@ -128,17 +135,81 @@ def montar_mensagens(ficha: str, historico: list[tuple[str, str]], tarefa: str) 
     return msgs
 
 
+# Esquema da resposta para o OpenRouter (json_schema estrito): tudo obrigatório, nulo permitido nos campos,
+# sem $ref (alguns provedores por trás do OpenRouter não resolvem referência).
+_CAMPO = {"type": ["string", "null"]}
+ESQUEMA_RESPOSTA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["mensagem", "campos", "intencao", "resumo"],
+    "properties": {
+        "mensagem": {"type": "string", "description": "Próxima mensagem ao lead (vazia se não houver o que enviar)"},
+        "campos": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": list(CamposColetados.model_fields),
+            "properties": {k: _CAMPO for k in CamposColetados.model_fields},
+        },
+        "intencao": {"type": "string", "enum": ["continuar", "qualificado", "pediu_humano", "sem_interesse", "nao_sei"]},
+        "resumo": {"type": "string", "description": "Resumo de uma ou duas frases da conversa até aqui, para o time"},
+    },
+}
+
+
+async def _responder_openrouter(cfg: ConfigIA, sistema: str, mensagens: list[dict],
+                                http: httpx.AsyncClient | None = None) -> tuple[RespostaIA, float]:
+    modelo = cfg.modelo or OPENROUTER_MODELO_PADRAO
+    corpo = {
+        "model": modelo,
+        "messages": [{"role": "system", "content": sistema}, *mensagens],
+        "max_tokens": 2000,
+        "response_format": {"type": "json_schema",
+                            "json_schema": {"name": "resposta_radar", "strict": True, "schema": ESQUEMA_RESPOSTA}},
+        "usage": {"include": True},          # o OpenRouter devolve o custo real (US$) da chamada
+    }
+    c = http or httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0))
+    try:
+        r = await c.post(OPENROUTER_URL, json=corpo, headers={"Authorization": f"Bearer {cfg.chave}",
+                                                             "X-Title": "RCO Radar"})
+    except httpx.HTTPError as e:
+        raise RuntimeError(f"IA fora do ar (OpenRouter: {type(e).__name__})") from e   # vira retentativa
+    finally:
+        if http is None:
+            await c.aclose()
+    if r.status_code == 429:
+        raise RuntimeError("limite de uso da IA (OpenRouter 429)")
+    if r.status_code >= 500:
+        raise RuntimeError(f"IA fora do ar (OpenRouter {r.status_code})")
+    if r.status_code >= 400:
+        detalhe = (r.json().get("error") or {}).get("message", "") if "json" in r.headers.get("content-type", "") else ""
+        raise IAIndisponivel(f"IA recusou a chamada (OpenRouter {r.status_code}): {detalhe[:200]}")
+    d = r.json()
+    escolha = (d.get("choices") or [{}])[0]
+    conteudo = ((escolha.get("message") or {}).get("content") or "").strip()
+    try:
+        resposta = RespostaIA.model_validate(json.loads(conteudo))
+    except (json.JSONDecodeError, ValidationError) as e:
+        raise IAIndisponivel("a IA não devolveu a resposta no formato combinado") from e
+    custo_usd = float((d.get("usage") or {}).get("cost") or 0.0)
+    return resposta, round(custo_usd * DOLAR, 6)
+
+
 async def responder(cfg: ConfigIA, agencia: str, ficha: str, historico: list[tuple[str, str]],
                     tarefa: str = "Responda à última mensagem do lead.",
-                    cliente: anthropic.AsyncAnthropic | None = None) -> tuple[RespostaIA, float]:
+                    cliente: anthropic.AsyncAnthropic | None = None,
+                    http: httpx.AsyncClient | None = None) -> tuple[RespostaIA, float]:
     """Devolve (resposta, custo em BRL). Levanta IAIndisponivel quando a IA não pode responder."""
     custo_zero.exigir_liberado("IA")
     if not cfg.habilitada:
         raise IAIndisponivel("IA do Radar desligada para a agência")
-    if (cfg.provedor or "anthropic") != "anthropic":
+    provedor = cfg.provedor or "anthropic"
+    if provedor not in PROVEDORES:
         raise IAIndisponivel(f"provedor {cfg.provedor} ainda não suportado nos robôs do Radar")
-    if not cfg.chave and cliente is None:
+    if not cfg.chave and cliente is None and http is None:
         raise IAIndisponivel("agência sem chave de API da IA")
+    if provedor == "openrouter":
+        return await _responder_openrouter(cfg, montar_sistema(agencia, cfg.instrucoes),
+                                           montar_mensagens(ficha, historico, tarefa), http)
     modelo = cfg.modelo or MODELO_PADRAO
     cliente = cliente or anthropic.AsyncAnthropic(api_key=cfg.chave)
     try:
