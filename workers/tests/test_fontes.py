@@ -1,3 +1,5 @@
+import httpx
+import respx
 """Conversores dos adaptadores, com itens no formato documentado de cada provedor.
 
 Os formatos ainda não foram conferidos com chamada real (sem chaves): validar na 1ª rodada paga.
@@ -84,3 +86,19 @@ def test_instagram_pago_depende_de_token_e_da_chave_de_config(monkeypatch):
     assert InstagramApify("t").habilitada
     monkeypatch.setenv("RADAR_INSTAGRAM_PAGO", "0")
     assert not InstagramApify("t").habilitada
+
+
+def test_termo_de_busca_do_instagram_sem_caracteres_que_o_ator_recusa():
+    from radar.fontes.instagram_apify import termo_busca_instagram
+    assert termo_busca_instagram("VM CELL - Assistência | Celular", "Teresina") == "VM CELL Assistência Celular Teresina"
+    assert termo_busca_instagram("Rei do iPhone: iPad, Mac & Watch!", "São Paulo") == "Rei do iPhone iPad Mac Watch São Paulo"
+
+
+@respx.mock
+async def test_token_da_apify_vai_no_cabecalho_e_nunca_na_url():
+    from radar.fontes.apify import rodar_ator
+    rota = respx.post(url__startswith="https://api.apify.com/").mock(return_value=httpx.Response(201, json=[]))
+    await rodar_ator("dono/ator", {"x": 1}, "apify_api_SEGREDO")
+    req = rota.calls[0].request
+    assert "SEGREDO" not in str(req.url)
+    assert req.headers["authorization"] == "Bearer apify_api_SEGREDO"

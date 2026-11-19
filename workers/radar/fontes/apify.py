@@ -26,7 +26,8 @@ async def rodar_ator(ator: str, entrada: dict, token: str,
     proprio = client is None
     client = client or httpx.AsyncClient(timeout=TIMEOUT)
     try:
-        resp = await client.post(url, params={"token": token, "clean": "true"}, json=entrada)
+        # token no cabeçalho, nunca na URL: o httpx registra a URL em log (19/11/2026 o token apareceu no log)
+        resp = await client.post(url, params={"clean": "true"}, json=entrada, headers={"Authorization": f"Bearer {token}"})
     finally:
         if proprio:
             await client.aclose()

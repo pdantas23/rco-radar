@@ -47,6 +47,15 @@ def converter(item: dict, agora: datetime | None = None) -> PerfilInstagram | No
     )
 
 
+
+# O ator de busca recusa !?.,:;-+=*&%$#@/\~^|<>()[]{}"'` e aspas (HTTP 400 "Input is not valid", 19/11/2026).
+_PROIBIDOS_BUSCA = re.compile(r"""[!?.,:;\-+=*&%$#@/\\~^|<>()\[\]{}"'`’“”]+""")
+
+
+def termo_busca_instagram(nome: str, cidade: str) -> str:
+    """'VM CELL - Assistência | Teresina' -> 'VM CELL Assistência Teresina' (só o que o ator aceita)."""
+    return " ".join(_PROIBIDOS_BUSCA.sub(" ", f"{nome} {cidade}").split())[:100]
+
 class InstagramApify(FonteInstagram):
     chave = "apify_instagram"
     rotulo = "Instagram (Apify)"
@@ -69,7 +78,7 @@ class InstagramApify(FonteInstagram):
         return next((p for p in (converter(i) for i in itens) if p), None)
 
     async def procurar(self, nome: str, cidade: str) -> list[str]:
-        itens = await rodar_ator(ATOR_BUSCA, {"search": f"{nome} {cidade}", "searchType": "user",
+        itens = await rodar_ator(ATOR_BUSCA, {"search": termo_busca_instagram(nome, cidade), "searchType": "user",
                                               "searchLimit": 3}, self.token, self.client)
         self.custo_ultima_chamada = self.estimar(len(itens))
         return [i["username"] for i in itens if i.get("username")]

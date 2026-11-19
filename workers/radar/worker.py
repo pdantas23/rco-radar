@@ -159,4 +159,6 @@ async def laco(dsn: str, espera: float = 2.0) -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    # cada requisição do httpx vira uma linha de log com a URL completa: fica só aviso/erro
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     asyncio.run(laco(os.environ["RADAR_DATABASE_URL"]))
