@@ -7,7 +7,6 @@ import asyncio
 import logging
 import os
 import socket
-import time
 
 import httpx
 import psycopg
@@ -127,34 +126,53 @@ def _talvez_concluir_pesquisa(conn, pesquisa_id) -> None:
         (pesquisa_id, pesquisa_id))
 
 
-async def laco(dsn: str, espera: float = 2.0) -> None:
-    """Jobs da fila + (se RADAR_CONTATO=1) despachante e conversador da Fase 3.
+async def laco_contato(dsn: str, espera: float = 2.0) -> None:
+    """Despachante e conversador da Fase 3, com conexão própria e em paralelo à fila de jobs.
 
-    O contato roda em UM processo só (RADAR_CONTATO=1 em uma réplica): o ritmo de envio depende disso.
+    19/11/2026: no mesmo laço da fila, uma leitura de Instagram na Apify (até minutos) atrasava a resposta da IA ao
+    lead. Aqui as conversas andam enquanto os jobs esperam a rede.
     """
     from datetime import datetime, timezone
 
     from radar import conversa
     from radar.comercial import Comercial
 
+    conn = psycopg.connect(dsn, autocommit=True)
+    comercial = Comercial()
+    while True:
+        agora = datetime.now(timezone.utc)
+        trabalhou = False
+        try:
+            trabalhou |= bool(await conversa.despachar(conn, comercial, agora))
+            trabalhou |= bool(await conversa.conversar(conn, comercial, agora))
+        except Exception as e:                      # noqa: BLE001 — o laço não pode morrer
+            log.warning("contato: %s", e)
+            if conn.closed:
+                conn = psycopg.connect(dsn, autocommit=True)
+        if not trabalhou:
+            await asyncio.sleep(espera)
+
+
+async def laco(dsn: str, espera: float = 2.0) -> None:
+    """Jobs da fila + (se RADAR_CONTATO=1) o contato num laço paralelo (laco_contato).
+
+    O contato roda em UM processo só (RADAR_CONTATO=1 em uma réplica): o ritmo de envio depende disso.
+    """
     nome = f"{socket.gethostname()}:{os.getpid()}"
     conn = psycopg.connect(dsn, autocommit=True)
     f = fontes_reais(conn)
     contato = contato_ligado()
-    comercial = Comercial() if contato else None
     log.info("worker %s no ar (contato %s%s)", nome, "ligado" if contato else "desligado",
              ", modo só dados abertos" if custo_zero.ativo() else "")
+    tarefa_contato = asyncio.create_task(laco_contato(dsn, espera)) if contato else None
     while True:
+        if tarefa_contato is not None and tarefa_contato.done():
+            # nunca deveria acontecer (o laço engole os erros); se acontecer, registra e religa
+            log.warning("contato parou: %s; religando", tarefa_contato.exception())
+            tarefa_contato = asyncio.create_task(laco_contato(dsn, espera))
         trabalhou = await processar_um(conn, f, nome)
-        if contato:
-            agora = datetime.now(timezone.utc)
-            try:
-                trabalhou |= bool(await conversa.despachar(conn, comercial, agora))
-                trabalhou |= bool(await conversa.conversar(conn, comercial, agora))
-            except Exception as e:                  # noqa: BLE001 — o laço não pode morrer
-                log.warning("contato: %s", e)
         if not trabalhou:
-            time.sleep(espera)
+            await asyncio.sleep(espera)              # cede a vez ao contato (time.sleep travaria o laço inteiro)
 
 
 if __name__ == "__main__":
