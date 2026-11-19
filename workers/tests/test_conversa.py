@@ -140,6 +140,17 @@ async def test_limite_por_hora(conn):
     assert await conversa.despachar(conn, com, AGORA + timedelta(minutes=61)) == 1
 
 
+async def test_limite_do_envio_passa_do_limite_da_agencia(conn):
+    """19/11/2026: o limite por hora do envio manda; o da agência (padrão 20) não é teto por cima."""
+    preparar(conn, n_leads=3, intervalo=1, limite_hora=3)
+    conn.execute("update radar.agencias set limite_hora = 1 where agency_id = %s", (AGENCIA,))
+    com = FakeComercial(conn)
+    enviados = 0
+    for i in range(3):
+        enviados += await conversa.despachar(conn, com, AGORA + timedelta(seconds=5 * i))
+    assert enviados == 3
+
+
 async def test_sem_confirmacao_nada_sai(conn):
     preparar(conn, confirmado=False)
     com = FakeComercial(conn)

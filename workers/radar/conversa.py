@@ -224,7 +224,9 @@ def _dentro_dos_limites(conn, conexao, disparo, cfg, agora) -> bool:
                   where c.origem = 'lp' and c.iniciada_em is not null
                     and coalesce(c.whatsapp_config_id, a.whatsapp_config_id) = %s) x""",
         (agora, agora, conexao, conexao)).fetchone()
-    lim_hora = min((disparo or {}).get("limite_hora") or 10**6, cfg.get("limite_hora") or 10**6)
+    # O limite por hora do ENVIO manda (decisão do Philip, 19/11/2026: sem teto da agência por cima). O da agência
+    # só vale quando não há envio (1ª mensagem de LP).
+    lim_hora = (disparo or {}).get("limite_hora") or cfg.get("limite_hora") or 10**6
     return hora < lim_hora and dia < (cfg.get("limite_dia") or 10**6)
 
 
