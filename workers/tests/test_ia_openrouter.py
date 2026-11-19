@@ -163,3 +163,16 @@ async def test_rede_fora_tenta_de_novo_e_402_vai_para_humano():
             await ia.responder(CFG, "A", "f", [("lead", "oi")], http=http, v2=True)
         with pytest.raises(ia.IAIndisponivel, match="formato"):
             await ia.responder(CFG, "A", "f", [("lead", "oi")], http=http, v2=True)
+
+
+def test_sem_eco_corta_a_abertura_que_repete_o_lead():
+    r = ia.RespostaIA.model_validate({**RESPOSTA, "mensagem": "Entendi, hoje vocês atraem clientes só no orgânico. Esse movimento vem mais de indicação, Instagram ou Google?"})
+    assert ia.sem_eco(r).mensagem == "Esse movimento vem mais de indicação, Instagram ou Google?"
+    r = ia.RespostaIA.model_validate({**RESPOSTA, "mensagem": "Entendi, vocês ainda não trabalharam com agência. Quem costuma decidir sobre marketing aí?"})
+    assert ia.sem_eco(r).mensagem == "Quem costuma decidir sobre marketing aí?"
+
+
+def test_sem_eco_nao_mexe_quando_nao_ha_pergunta_depois_ou_nao_comeca_com_eco():
+    for msg in ("Entendi. Obrigado pelas respostas!", "Show! O que mais trava o crescimento hoje?", "Boa tarde! Tudo bem?"):
+        r = ia.RespostaIA.model_validate({**RESPOSTA, "mensagem": msg})
+        assert ia.sem_eco(r).mensagem == msg

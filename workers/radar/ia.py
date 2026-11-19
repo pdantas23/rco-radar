@@ -12,6 +12,7 @@ Regras fixas, que as instruções da agência não sobrescrevem:
 """
 
 import json
+import re
 import os
 from dataclasses import dataclass
 from datetime import datetime
@@ -59,7 +60,9 @@ Quando tiver decisor, faturamento_informado, investe_anuncio, dor e aceita_conta
 # escolhe o próximo assunto (radar/triagem.py: proxima_etapa) e manda na tarefa; aqui ficam o jeito e os fatos.
 PROMPT_TRIAGEM = """Você conversa por WhatsApp em nome do time da agência {agencia} com {quem}. Seu trabalho é \
 entender o momento do negócio seguindo um roteiro, sem parecer formulário:
-- uma pergunta por vez, curta, espelhando as palavras do lead;
+- uma pergunta por vez, curta; vá direto à próxima pergunta, sem resumir nem repetir o que o lead acabou de \
+dizer e sem abrir com "Entendi"; quando couber, uma reação de poucas palavras e diferente a cada vez (ex.: "Boa!", \
+"Show.", "Faz sentido.") antes da pergunta;
 - ordem: situação (segmento, tempo de mercado), cidade (cedo), marketing hoje (como atrai clientes, anúncio), \
 necessidade (dor nas palavras do lead), experiência com agência, autoridade (quem decide; se não decide, peça o \
 contato do decisor ou a conversa com os dois), timing (quando quer começar) e, POR ÚLTIMO, faturamento em faixas \
@@ -227,6 +230,23 @@ def montar_mensagens(ficha: str, historico: list[tuple[str, str]], tarefa: str, 
     return msgs
 
 
+
+# "Entendi, <o que o lead disse>." (abertura + vírgula + repetição); reações curtas como "Show!" ficam
+_ECO = re.compile(r"^\s*(entendi|entendido|certo|perfeito|ok|beleza|show)\s*,\s*[^.!?\n]{8,}[.!]\s+", re.IGNORECASE)
+
+
+def sem_eco(r):
+    """Corta a frase de abertura que só repete o lead ("Entendi, hoje vocês ... ."), se depois dela ainda houver
+    pergunta. Pedido do Philip (19/11/2026): a IA abria toda mensagem com "Entendi" + o que o lead acabou de dizer.
+    A instrução no prompt também diz isso; aqui é a garantia, já que reforçar prompt nem sempre pega."""
+    texto = getattr(r, "mensagem", "") or ""
+    m = _ECO.match(texto)
+    if m:
+        resto = texto[m.end():].strip()
+        if "?" in resto:
+            r.mensagem = resto[0].upper() + resto[1:]
+    return r
+
 async def responder(cfg: ConfigIA, agencia: str, ficha: str, historico: list[tuple[str, str]],
                     tarefa: str = "Responda à última mensagem do lead.",
                     cliente=None, origem: str = "radar", v2: bool = False,
@@ -267,7 +287,7 @@ async def responder(cfg: ConfigIA, agencia: str, ficha: str, historico: list[tup
     custo = custo_brl(modelo, resp.usage.input_tokens, resp.usage.output_tokens)
     if resp.stop_reason == "refusal" or resp.parsed_output is None:
         raise IAIndisponivel("a IA não respondeu (recusa ou resposta vazia)")
-    return resp.parsed_output, custo
+    return sem_eco(resp.parsed_output), custo
 
 
 # ── OpenRouter (Chat Completions compatível com OpenAI; base: analisador-comercial providers/openrouter.py) ──
@@ -356,4 +376,4 @@ async def _responder_openrouter(cfg: ConfigIA, sistema: str, mensagens: list[dic
         custo = round(float(uso["cost"]) * DOLAR, 6)
     else:
         custo = custo_brl(modelo, uso.get("prompt_tokens") or 0, uso.get("completion_tokens") or 0)
-    return resposta, custo
+    return sem_eco(resposta), custo
