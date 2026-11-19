@@ -7,6 +7,8 @@ POST {COMERCIAL_URL}/api/internal/radar/descartar — triagem de LP decidiu 'des
                                                    etiqueta o contato com "Fora do perfil".
 POST {COMERCIAL_URL}/api/internal/radar/horarios — triagem v2: 2 horários livres do Google Calendar do SDR.
 POST {COMERCIAL_URL}/api/internal/radar/agendar  — triagem v2: cria o evento e a reunião no horário escolhido.
+POST {COMERCIAL_URL}/api/internal/radar/digitando — "digitando..." no chat do lead (radar/toque_humano.py).
+POST {COMERCIAL_URL}/api/internal/radar/reagir   — reação com emoji à mensagem do lead (radar/toque_humano.py).
 (formato das duas: docs/triagem-ia.md, "Contrato das rotas de agenda (worker)")
 Origem 'lp' (triagem IA, sem radar.leads): lead_id = None e a conversa é identificada por conversa_id
 (radar.conversas.id) no /enviar; o telefone é opcional (o COMERCIAL usa o do contato).
@@ -96,3 +98,12 @@ class Comercial:
     async def descartar(self, *, agency_id, conversa_id, motivo: str | None = None) -> dict:
         return await self._post("/api/internal/radar/descartar", {
             "agency_id": agency_id, "conversa_id": conversa_id, "motivo": motivo})
+
+    async def digitando(self, *, agency_id, conversation_id) -> dict:
+        return await self._post("/api/internal/radar/digitando", {
+            "agency_id": agency_id, "conversation_id": conversation_id})
+
+    async def reagir(self, *, agency_id, conversation_id, message_id, emoji: str) -> dict:
+        """message_id = public.messages.id (uuid) da mensagem do lead."""
+        return await self._post("/api/internal/radar/reagir", {
+            "agency_id": agency_id, "conversation_id": conversation_id, "message_id": message_id, "emoji": emoji})

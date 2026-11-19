@@ -40,3 +40,16 @@ def conn():
     preparar_agencias(c)
     yield c
     c.close()
+
+
+@pytest.fixture(autouse=True)
+def sem_espera_de_digitando(monkeypatch):
+    """O "digitando..." (radar/toque_humano.py) espera até 8 s por resposta: nos testes a espera é registrada, não feita."""
+    from radar import toque_humano
+    esperas = []
+
+    async def falso(seg):
+        esperas.append(seg)
+
+    monkeypatch.setattr(toque_humano, "dormir", falso)
+    return esperas

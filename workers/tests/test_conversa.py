@@ -19,13 +19,25 @@ AGORA = datetime(2026, 10, 20, 13, 0, tzinfo=timezone.utc)
 class FakeComercial:
     """Imita as rotas internas: cria a conversa e grava a mensagem 'bot' no inbox."""
 
-    def __init__(self, conn, falha=None):
-        self.conn, self.falha = conn, falha
+    def __init__(self, conn, falha=None, falha_digitando=False):
+        self.conn, self.falha, self.falha_digitando = conn, falha, falha_digitando
         self.envios, self.passagens = [], []
+        self.eventos = []                    # ordem das chamadas: ("digitando" | "reagir" | "enviar", detalhe)
+
+    async def digitando(self, *, agency_id, conversation_id):
+        self.eventos.append(("digitando", str(conversation_id)))
+        if self.falha_digitando:
+            raise RuntimeError("COMERCIAL /api/internal/radar/digitando: HTTP 502")
+        return {"ok": True}
+
+    async def reagir(self, *, agency_id, conversation_id, message_id, emoji):
+        self.eventos.append(("reagir", (str(message_id), emoji)))
+        return {"ok": True}
 
     async def enviar(self, *, agency_id, lead_id, whatsapp_config_id, telefone, nome, texto, primeira,
                      idempotency_key=None):
         self.envios.append({"lead_id": str(lead_id), "texto": texto, "primeira": primeira})
+        self.eventos.append(("enviar", texto))
         if self.falha:
             return ResultadoEnvio(False, motivo=self.falha)
         conv = self.conn.execute("select conversation_id, contact_id from radar.conversas where lead_id = %s",
@@ -56,9 +68,9 @@ class FakeIA:
                                usage=SimpleNamespace(input_tokens=1000, output_tokens=100))
 
 
-def resposta(mensagem="Legal! E hoje vocês fazem alguma divulgação?", intencao="continuar", **campos):
+def resposta(mensagem="Legal! E hoje vocês fazem alguma divulgação?", intencao="continuar", reacao="", **campos):
     return ia.RespostaIA(mensagem=mensagem, campos=ia.CamposColetados(**campos), intencao=intencao,
-                         resumo="Dono, agenda cheia só no fim de semana.")
+                         resumo="Dono, agenda cheia só no fim de semana.", reacao=reacao)
 
 
 def preparar(conn, n_leads=3, intervalo=90, limite_hora=40, confirmado=True, ia_ligada=True):
@@ -300,3 +312,62 @@ async def test_sem_mensagem_inicial_o_lote_espera(conn):
     com = FakeComercial(conn)
     assert await conversa.despachar(conn, com, AGORA) == 0 and com.envios == []
     assert {r[0] for r in conn.execute("select status from radar.disparos_leads")} == {"pendente"}
+
+
+# ── toque humano: "digitando..." e reação ────────────────────────────────
+@pytest.fixture
+def esperas(sem_espera_de_digitando):
+    return sem_espera_de_digitando          # conftest: a espera é registrada, não feita
+
+
+def lead_responde_id(conn, lead_id, texto, quando):
+    conv = conn.execute("select conversation_id from radar.conversas where lead_id = %s", (lead_id,)).fetchone()[0]
+    return conn.execute("""insert into public.messages (conversation_id, sender_type, content_text, created_at)
+                           values (%s, 'customer', %s, %s) returning id""", (conv, texto, quando)).fetchone()[0]
+
+
+async def test_digitando_antes_da_resposta_e_nunca_na_primeira(conn, esperas):
+    leads, com = await _contatar(conn)
+    assert com.eventos == [("enviar", com.envios[0]["texto"])]                 # 1ª mensagem: sem "digitando..."
+    t = AGORA + timedelta(minutes=10)
+    lead_responde(conn, leads[0], "Sou o dono.", t)
+    texto = "Show! E hoje vocês fazem alguma divulgação?"
+    await conversa.conversar(conn, com, t + timedelta(seconds=5), cliente_ia=FakeIA(resposta(texto)))
+    assert [e[0] for e in com.eventos[1:]] == ["digitando", "enviar"]
+    assert sum(esperas) == pytest.approx(1.5 + 0.035 * len(texto))
+
+
+async def test_presenca_falhou_resposta_sai_sem_esperar(conn, esperas):
+    leads, com = await _contatar(conn)
+    com.falha_digitando = True
+    t = AGORA + timedelta(minutes=10)
+    lead_responde(conn, leads[0], "Sou o dono.", t)
+    await conversa.conversar(conn, com, t + timedelta(seconds=5), cliente_ia=FakeIA(resposta()))
+    assert [e[0] for e in com.eventos[1:]] == ["digitando", "enviar"] and esperas == []
+
+
+async def test_reage_a_ultima_mensagem_do_lead_antes_de_digitar(conn, esperas):
+    leads, com = await _contatar(conn)
+    t = AGORA + timedelta(minutes=10)
+    lead_responde_id(conn, leads[0], "Sou o dono.", t)
+    ultima = lead_responde_id(conn, leads[0], "E a casa está cheia no fim de semana!", t + timedelta(seconds=2))
+    await conversa.conversar(conn, com, t + timedelta(seconds=5), cliente_ia=FakeIA(resposta(reacao="🙌")))
+    assert [e[0] for e in com.eventos[1:]] == ["reagir", "digitando", "enviar"]
+    assert com.eventos[1][1] == (str(ultima), "🙌")
+
+
+@pytest.mark.parametrize("reacao,intencao", [("😂", "continuar"), ("👍", "sem_interesse"), ("👍", "pediu_humano")])
+async def test_reacao_fora_da_lista_ou_em_resposta_negativa_nao_sai(conn, esperas, reacao, intencao):
+    leads, com = await _contatar(conn)
+    t = AGORA + timedelta(minutes=10)
+    lead_responde_id(conn, leads[0], "Não tenho interesse.", t)
+    await conversa.conversar(conn, com, t + timedelta(seconds=5),
+                             cliente_ia=FakeIA(resposta("Tudo bem, obrigado!", intencao, reacao=reacao)))
+    assert "reagir" not in [e[0] for e in com.eventos]
+
+
+async def test_acompanhamento_nao_reage(conn, esperas):
+    leads, com = await _contatar(conn)
+    await conversa.conversar(conn, com, AGORA + timedelta(hours=25),
+                             cliente_ia=FakeIA(resposta("Oi! Conseguiu ver minha mensagem?", reacao="👍")))
+    assert [e[0] for e in com.eventos[1:]] == ["digitando", "enviar"]

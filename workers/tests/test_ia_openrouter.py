@@ -96,7 +96,8 @@ def _todos_os_nos(n, caminho="$"):
 
 def test_esquema_v2_no_formato_estrito_do_openrouter():
     sch = ia.ESQUEMA_RESPOSTA
-    assert set(sch["required"]) == {"mensagem", "campos", "fatos", "intencao", "escolha_horario", "resumo"}
+    assert set(sch["required"]) == {"mensagem", "campos", "fatos", "intencao", "escolha_horario", "resumo",
+                                     "reacao"}
     assert set(sch["properties"]["fatos"]["required"]) == set(ia.Fatos.model_fields)
     for caminho, n in _todos_os_nos(sch):
         assert not {"$ref", "$defs", "anyOf", "oneOf", "allOf", "default", "title"} & set(n), caminho
@@ -106,6 +107,8 @@ def test_esquema_v2_no_formato_estrito_do_openrouter():
     assert sch["properties"]["fatos"]["properties"]["faturamento_valor"]["type"] == ["number", "null"]
     assert all(p["type"] == ["string", "null"] for p in sch["properties"]["campos"]["properties"].values())
     assert sch["properties"]["escolha_horario"]["enum"] == ["opcao_1", "opcao_2", "nenhuma", "indefinido"]
+    # reação: texto livre no schema (emoji fora da lista não pode derrubar a resposta; o código filtra)
+    assert sch["properties"]["reacao"]["type"] == "string" and "enum" not in sch["properties"]["reacao"]
 
 
 def test_schema_estrito_recusa_uniao_que_o_openrouter_nao_aceitaria():

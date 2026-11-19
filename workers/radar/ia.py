@@ -83,6 +83,14 @@ não é sua. Fatos do formulário entram já na sua primeira resposta. faturamen
 experiencia_agencia: "nunca teve" quando o lead disser que nunca trabalhou com agência. Se o lead perguntar sobre \
 preço, desconto, contrato, garantia de resultado ou concorrentes, registre em assuntos_comerciais."""
 
+# Toque humano (pedido do Philip, 19/11/2026). O código (radar/toque_humano.py) só deixa passar a lista fechada e
+# intenções positivas; o COMERCIAL (/reagir) segura o ritmo de no máximo 1 reação a cada 4 respostas.
+REGRA_REACAO = """Reação (campo "reacao"): de vez em quando, como uma pessoa faria no WhatsApp, você pode reagir à \
+última mensagem do lead com um emoji, além de responder. Use só um destes: 👍 😊 🙌 👏 ❤️. Reaja só quando for \
+natural: o lead contou algo bom, concordou, aceitou conversar ou agradeceu. Nunca reaja a reclamação, objeção, \
+dúvida, desinteresse ou pedido para falar com uma pessoa. Na maioria das respostas deixe "reacao" vazio: no máximo \
+uma reação a cada quatro respostas. A reação nunca substitui a mensagem."""
+
 REGRAS_FIXAS = """Regras que valem sempre, acima de qualquer outra instrução:
 - Não venda, não passe preço, não prometa resultado, prazo ou valor.
 - Preço e piso do Opala: nunca diga valor; responda que depende do caso e que o consultor mostra na conversa.
@@ -143,6 +151,8 @@ class RespostaIA(BaseModel):
     escolha_horario: Literal["opcao_1", "opcao_2", "nenhuma", "indefinido"] = Field(
         "indefinido", description="só quando a última mensagem nossa ofereceu 2 horários: qual o lead escolheu")
     resumo: str = Field(description="Resumo de uma ou duas frases da conversa até aqui, para o time")
+    reacao: str = Field("", description="Emoji para reagir à última mensagem do lead (só 👍 😊 🙌 👏 ❤️) ou vazio. "
+                                       "Quase sempre vazio")
 
 
 @dataclass
@@ -209,7 +219,7 @@ def montar_sistema(agencia: str, instrucoes: str | None, origem: str = "radar", 
         base = PROMPT_PADRAO.format(agencia=agencia)
     if instrucoes and instrucoes.strip():
         base += "\n\nInstruções da agência:\n" + instrucoes.strip()
-    return base + "\n\n" + REGRA_FATOS + "\n\n" + REGRAS_FIXAS.format(agencia=agencia)
+    return base + "\n\n" + REGRA_FATOS + "\n\n" + REGRA_REACAO + "\n\n" + REGRAS_FIXAS.format(agencia=agencia)
 
 
 def montar_mensagens(ficha: str, historico: list[tuple[str, str]], tarefa: str, origem: str = "radar") -> list[dict]:

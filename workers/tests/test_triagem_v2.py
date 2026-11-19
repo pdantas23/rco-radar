@@ -894,3 +894,37 @@ async def test_radar_v2_pelo_openrouter_da_agencia(conn, monkeypatch):
     assert com.envios[-1]["texto"] == "Hoje como os clientes chegam até vocês?"
     valor = conn.execute("select valor from radar.custos_api where fonte = 'ia_radar'").fetchone()[0]
     assert float(valor) == pytest.approx(0.0003 * ia.DOLAR)
+
+
+# ── toque humano na triagem v2 (cliente HTTP real sobre o stub) ──────────
+async def test_v2_reage_digita_e_envia_na_ordem_e_reage_na_escolha_de_horario(conn):
+    cid, com = await lp_contatada(conn)
+    assert [r for r, _ in com.chamadas] == ["enviar"]                                # 1ª mensagem: sem "digitando..."
+    t = AGORA + timedelta(minutes=2)
+    r = resp("E quem decide aí?", segmento="Clínica")
+    r.reacao = "👍"
+    await responde(conn, com, cid, "Clínica em Teresina", t, r)
+    assert [r for r, _ in com.chamadas[1:]] == ["reagir", "digitando", "enviar"]
+    ultima = conn.execute("""select id from public.messages where conversation_id = %s and sender_type = 'customer'
+                             order by created_at desc limit 1""", (conv(conn, cid)["conversation_id"],)).fetchone()[0]
+    [rg] = com.de("reagir")
+    assert rg == {"agency_id": str(AGENCIA), "conversation_id": str(conv(conn, cid)["conversation_id"]),
+                  "message_id": str(ultima), "emoji": "👍"}
+    assert com.de("digitando")[0] == {"agency_id": str(AGENCIA),
+                                      "conversation_id": str(conv(conn, cid)["conversation_id"])}
+
+    await responde(conn, com, cid, "Sou a dona, faturo 80 mil, quero começar já", t + timedelta(minutes=5),
+                   resp(**TODOS_OK))
+    assert conv(conn, cid)["etapa"] == "oferta"
+    escolha = resp("Ótimo!", escolha="opcao_1")
+    escolha.reacao = "🙌"
+    await responde(conn, com, cid, "Pode ser quarta", t + timedelta(minutes=8), escolha)
+    assert [c["emoji"] for c in com.de("reagir")] == ["👍", "🙌"]
+
+
+async def test_v2_pediu_humano_nao_reage(conn):
+    cid, com = await lp_contatada(conn)
+    r = resp("Claro, já chamo alguém do time.", intencao="pediu_humano")
+    r.reacao = "👍"
+    await responde(conn, com, cid, "Quero falar com uma pessoa", AGORA + timedelta(minutes=2), r)
+    assert com.de("reagir") == [] and len(com.de("digitando")) == 1

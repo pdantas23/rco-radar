@@ -28,6 +28,15 @@ class FakeComercialLP:
     def __init__(self, conn, falha=None, erro_rede=False, passar_cai=False):
         self.conn, self.falha, self.erro_rede, self.passar_cai = conn, falha, erro_rede, passar_cai
         self.envios, self.passagens, self.descartes = [], [], []
+        self.digitandos, self.reacoes = [], []
+
+    async def digitando(self, **kw):
+        self.digitandos.append(kw)
+        return {"ok": True}
+
+    async def reagir(self, **kw):
+        self.reacoes.append(kw)
+        return {"ok": True}
 
     async def enviar(self, *, agency_id, lead_id, whatsapp_config_id, telefone, nome, texto, primeira,
                      idempotency_key=None, conversa_id=None):
@@ -328,7 +337,8 @@ async def test_openrouter_escolhido_pela_config_do_agente(conn, monkeypatch):
     assert corpo["model"] == "openai/gpt-5.6-luna" and corpo["messages"][0]["role"] == "system"
     schema = corpo["response_format"]["json_schema"]
     assert schema["strict"] is True and schema["schema"]["additionalProperties"] is False
-    assert set(schema["schema"]["required"]) == {"mensagem", "campos", "fatos", "intencao", "resumo", "escolha_horario"}
+    assert set(schema["schema"]["required"]) == {"mensagem", "campos", "fatos", "intencao", "resumo", "escolha_horario",
+                                                "reacao"}
     c = conv(conn, cid)
     assert com.envios[-1]["texto"] == "Legal! Vocês investem em anúncio?" and c["decisao"] == "em_andamento"
     assert c["nota_detalhe"]["fatos"]["decisor"] == "dono_socio"

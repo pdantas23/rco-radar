@@ -31,7 +31,7 @@ from zoneinfo import ZoneInfo
 
 from psycopg.rows import dict_row
 
-from radar import gate, ia, triagem
+from radar import gate, ia, toque_humano, triagem
 from radar.comercial import Comercial
 
 log = logging.getLogger("radar.conversa")
@@ -439,7 +439,7 @@ async def conversar(conn, comercial: Comercial, agora: datetime, cliente_ia=None
 
 def _novas(conn, c) -> list[dict]:
     return _cur(conn).execute(
-        """select sender_type, content_type, content_text, created_at from public.messages
+        """select id, sender_type, content_type, content_text, created_at from public.messages
            where conversation_id = %s and created_at > coalesce(%s, '-infinity')
              and sender_type in ('customer','agent') order by created_at""",
         (c["conversation_id"], c["lida_ate"])).fetchall()
@@ -522,6 +522,8 @@ async def _tratar(conn, comercial, c, agora, cliente_ia) -> None:
     acao = _acao(resp.intencao)
 
     if resp.mensagem.strip():
+        if acao in ("seguir", "qualificado"):
+            await _reagir(comercial, c, do_lead, resp)
         if not await _enviar(conn, comercial, c, lead, cfg_ag, agora, resp.mensagem, campos, ultima):
             return
 
@@ -585,6 +587,8 @@ async def _enviar(conn, comercial, c, lead, cfg_ag, agora, texto, campos, ultima
             await _passar(conn, comercial, c, lead, "ia_sem_resposta", campos, motivo)
         conn.execute("update radar.conversas set lida_ate = %s where id = %s", (ultima, c["id"]))
         return False
+    # "digitando..." pelo tempo do texto antes de enviar (falha de presença não segura a resposta)
+    await toque_humano.digitar(comercial, agency_id=c["agency_id"], conversation_id=c["conversation_id"], texto=texto)
     r = await comercial.enviar(agency_id=c["agency_id"], lead_id=lead["id"],
                                whatsapp_config_id=c["whatsapp_config_id"], telefone=lead["whatsapp"] or lead["telefone"],
                                nome=lead["nome"], texto=texto, primeira=False,
@@ -592,6 +596,13 @@ async def _enviar(conn, comercial, c, lead, cfg_ag, agora, texto, campos, ultima
     if not r.ok:
         raise RuntimeError(f"envio falhou: {r.motivo}")
     return True
+
+
+async def _reagir(comercial, c, do_lead, resp) -> None:
+    """Reação da IA à última mensagem do lead (só resposta a mensagem nova; filtro e ritmo em toque_humano/COMERCIAL)."""
+    if do_lead:
+        await toque_humano.reagir(comercial, agency_id=c["agency_id"], conversation_id=c["conversation_id"],
+                                  mensagens_do_lead=do_lead, reacao=resp.reacao, intencao=resp.intencao)
 
 
 def _sem_interesse(conn, c, lead) -> None:
@@ -704,6 +715,7 @@ async def _tratar_v2(conn, comercial, c, agora, cliente_ia, ultima, lead, cfg_ag
     ctx = (conn, comercial, c, lead, cfg_ag, agora, fatos, res, campos, ultima)
 
     if etapa == "oferta" and do_lead and resp.escolha_horario in ("opcao_1", "opcao_2"):
+        await _reagir(comercial, c, do_lead, resp)
         await _agendar(*ctx, int(resp.escolha_horario[-1]) - 1)
         return
     if etapa == "oferta" and do_lead and resp.escolha_horario == "nenhuma":
@@ -718,6 +730,8 @@ async def _tratar_v2(conn, comercial, c, agora, cliente_ia, ultima, lead, cfg_ag
         return
 
     # segue a conversa: a mensagem da IA sai e a cadência anda
+    if resp.mensagem.strip():
+        await _reagir(comercial, c, do_lead, resp)
     if resp.mensagem.strip() and not await _enviar(conn, comercial, c, lead, cfg_ag, agora, resp.mensagem,
                                                    campos, ultima, fatos):
         return
